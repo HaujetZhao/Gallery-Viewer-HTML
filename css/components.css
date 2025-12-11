@@ -1,0 +1,450 @@
+/* 初始提示界面 */
+#hint {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background-color: var(--bg-color);
+    z-index: 1000;
+}
+
+.intro-content {
+    max-width: 600px;
+    padding: 40px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.intro-content:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+}
+
+.intro-content i {
+    font-size: 80px;
+    color: #2C3E50;
+    margin-bottom: 20px;
+}
+
+.intro-content h1 {
+    font-size: 36px;
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.intro-content p {
+    font-size: 18px;
+    color: #7f8c8d;
+    margin-bottom: 10px;
+}
+
+/* 悬浮设置按钮 */
+.settings-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    background-color: #2C3E50;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: none;
+}
+
+body.sidebar-pinned .settings-btn {
+    left: calc(var(--sidebar-width) + 20px);
+}
+
+.settings-btn:hover {
+    transform: rotate(30deg);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.settings-btn i {
+    font-size: 24px;
+    color: white;
+}
+
+/* 筛选悬浮区域 */
+.filter-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+}
+
+.filter-container input[type="text"] {
+    padding: 12px 20px;
+    border: 1px solid #d1d9e6;
+    border-radius: 25px;
+    font-size: 14px;
+    width: 250px;
+    background-color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    padding-right: 80px;
+}
+
+.filter-container input[type="text"]:focus {
+    outline: none;
+    border-color: #2C3E50;
+    box-shadow: 0 6px 16px rgba(67, 97, 238, 0.15);
+    width: 300px;
+}
+
+.filter-count {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #2C3E50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* 设置弹窗 */
+.settings-modal {
+    position: fixed;
+    top: 80px;
+    left: 80px;
+    width: 350px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    z-index: 200;
+    display: none;
+    overflow: hidden;
+}
+
+.settings-modal.show {
+    display: block;
+}
+
+.settings-header {
+    background-color: #2C3E50;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: move;
+}
+
+.settings-header h3 {
+    font-size: 18px;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.drag-handle {
+    color: rgba(255, 255, 255, 0.7);
+    cursor: grab;
+    padding: 5px;
+}
+
+.settings-body {
+    padding: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.setting-item {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+.setting-item:last-child {
+    margin-bottom: 0;
+}
+
+.info-item {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #e1e5eb;
+}
+
+.info-value {
+    font-family: monospace;
+    color: #2C3E50;
+    font-weight: bold;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn-block {
+    flex: 1;
+    padding: 6px 4px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 50px;
+    white-space: nowrap;
+}
+
+.btn-block.warning {
+    background-color: #f39c12;
+    color: white;
+}
+
+.btn-block.warning:hover {
+    background-color: #e67e22;
+}
+
+.btn-block.danger {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-block.danger:hover {
+    background-color: #c0392b;
+}
+
+.separator {
+    height: 1px;
+    background-color: #e1e5eb;
+    margin: 15px 0;
+}
+
+.setting-item label {
+    font-size: 14px;
+    color: #2c3e50;
+    font-weight: 600;
+    min-width: 80px;
+}
+
+.setting-item select {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #d1d9e6;
+    border-radius: 6px;
+    font-size: 14px;
+    background-color: white;
+    cursor: pointer;
+}
+
+.setting-item input[type="range"] {
+    flex: 2;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #e0e5ec;
+    border-radius: 3px;
+    outline: none;
+}
+
+.setting-item input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #2C3E50;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.setting-item span {
+    min-width: 50px;
+    text-align: right;
+    color: #2C3E50;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.setting-item label[inactive] {
+    color: #95a5a6;
+    opacity: 0.7;
+}
+
+.btn-small {
+    background-color: #2C3E50;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-small:hover {
+    background-color: rgb(77, 104, 225);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(67, 97, 238, 0.2);
+}
+
+/* 右键菜单 */
+.context-menu {
+    position: fixed;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    padding: 5px 0;
+    min-width: 120px;
+    z-index: 9999;
+    display: none;
+}
+
+.context-menu.show {
+    display: block;
+}
+
+.menu-item {
+    padding: 8px 15px;
+    font-size: 14px;
+    cursor: pointer;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.menu-item:hover {
+    background-color: #f5f7fa;
+}
+
+.menu-item.delete {
+    color: #e74c3c;
+}
+
+/* 感应区 */
+.scrollZone {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    height: 150px;
+    z-index: 800;
+    pointer-events: none;
+    background-color: transparent;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+}
+
+.scrollZone.visible {
+    opacity: 1;
+}
+
+#topScrollZone {
+    top: 0;
+}
+
+#bottomScrollZone {
+    bottom: 0;
+    color: rgb(44, 62, 80);
+}
+
+.top-scroll-zone {
+    background: linear-gradient(to bottom, rgba(44, 62, 80, 0.1) 0%, transparent 100%);
+}
+
+.bottom-scroll-zone {
+    background: linear-gradient(to top, rgba(44, 62, 80, 0.1) 0%, transparent 100%);
+}
+
+/* Toast 提示 */
+#toastContainer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.toast {
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: toastFadeInOut 3s ease-in-out forwards;
+    opacity: 0;
+    transform: translateY(-10px);
+    margin-bottom: 10px;
+}
+
+.toast-success {
+    background-color: #27ae60;
+    color: white;
+    border-left: 4px solid #219653;
+}
+
+.toast-warning {
+    background-color: #f39c12;
+    color: white;
+    border-left: 4px solid #e67e22;
+}
+
+.toast-error {
+    background-color: #e74c3c;
+    color: white;
+    border-left: 4px solid #c0392b;
+}
+
+.toast-info {
+    background-color: #3498db;
+    color: white;
+    border-left: 4px solid #2980b9;
+}
+
+.toast-icon {
+    font-size: 16px;
+}
+
+@keyframes toastFadeInOut {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    10% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    90% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}

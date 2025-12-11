@@ -1,0 +1,12 @@
+# Ignore everything in root
+/*
+
+# Allow specific directories
+!/css/
+!/js/
+!/assets/
+
+# Allow specific files
+!/index.html
+!/README.md
+!/.gitignore

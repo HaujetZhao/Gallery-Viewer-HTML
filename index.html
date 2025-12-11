@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%0A%20%20%3Crect%20x%3D%221%22%20y%3D%221%22%20width%3D%2298%22%20height%3D%2298%22%20rx%3D%2214.7%22%20ry%3D%2214.7%22%20fill%3D%22%232c3e50%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M160%2032c-35.3%200-64%2028.7-64%2064V320c0%2035.3%2028.7%2064%2064%2064H512c35.3%200%2064-28.7%2064-64V96c0-35.3-28.7-64-64-64H160zM396%20138.7l96%20144c4.9%207.4%205.4%2016.8%201.2%2024.6S480.9%20320%20472%20320H328%20280%20200c-9.2%200-17.6-5.3-21.6-13.6s-2.9-18.2%202.9-25.4l64-80c4.6-5.7%2011.4-9%2018.7-9s14.2%203.3%2018.7%209l17.3%2021.6%2056-84C360.5%20132%20368%20128%20376%20128s15.5%204%2020%2010.7z%22%20fill%3D%22%23ffffff%22%20transform%3D%22translate(9%2C%2015)%20scale(0.13671875)%22%2F%3E%0A%3C%2Fsvg%3E">
+    <title>照片浏览器</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入 SparkMD5 用于计算文件哈希 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
+    <!-- 引入 EXIF-JS 用于读取图片元数据 -->
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+</head>
+
+<body>
+    <!-- 初始提示界面 -->
+    <div id="hint">
+        <div class="intro-content">
+            <i class="fas fa-images"></i>
+            <h1>照片浏览器</h1>
+            <div>
+                <p>点击打开文件夹（FileSystem API）</p>
+                <p style="font-size: 14px; opacity: 0.7;">支持：拖拽整理、重命名、即时切换</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 侧边栏文件树 -->
+    <div id="sidebar">
+        <div id="sidebar-content">
+            <div class="sidebar-header">
+                <h3><i class="fas fa-folder-tree"></i> 文件夹</h3>
+                <button id="pinSidebarBtn" title="固定侧边栏"><i class="fas fa-thumbtack"></i></button>
+            </div>
+
+            <div class="special-folders">
+                <ul>
+                    <li id="allPhotosNode" class="tree-node">
+                        <i class="fas fa-layer-group"></i> 所有图片 (All Photos)
+                    </li>
+                </ul>
+            </div>
+            <div class="separator-line"></div>
+
+            <div id="treeContainer">
+                <ul id="folderTreeRoot"></ul>
+            </div>
+        </div>
+
+        <div id="resize-helper"></div>
+    </div>
+
+    <!-- 悬浮设置按钮 -->
+    <div class="settings-btn" id="settingBtn">
+        <i class="fas fa-cog"></i>
+    </div>
+
+    <!-- 筛选悬浮区域 -->
+    <div class="filter-container">
+        <input type="text" id="searchInput" placeholder="搜索文件名...">
+        <div class="filter-count" id="filterCount">
+            <span id="filteredCount">0</span>/<span id="totalCount">0</span>
+        </div>
+    </div>
+
+    <div class="main-content-wrapper">
+        <div class="container">
+            <!-- 设置弹窗 -->
+            <div id="settingBar" class="settings-modal">
+                <div class="settings-header">
+                    <h3><i class="fas fa-sliders-h"></i> 设置</h3>
+                    <div class="drag-handle">
+                        <i class="fas fa-arrows-alt"></i>
+                    </div>
+                </div>
+                <div class="settings-body">
+
+                    <div class="setting-item">
+                        <label>当前路径：</label>
+                        <span id="currentPathDisplay" style="word-break: break-all; font-size: 12px;">未选择</span>
+                    </div>
+
+                    <div class="separator"></div>
+
+                    <div class="setting-item">
+                        <label for="sortSelect">排序方式：</label>
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                            <select id="sortSelect" style="flex: 1;">
+                                <option value="name">文件名</option>
+                                <option value="size">文件大小</option>
+                                <option value="date">修改日期</option>
+                            </select>
+                            <button id="sortToggleBtn" class="btn-small">
+                                <i class="fas fa-arrow-down-short-wide"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label for="colCountSlider">显示列数</label>
+                        <input type="range" id="colCountSlider" min="1" max="10" value="5" step="1">
+                        <span id="colCountValue">5列</span>
+                    </div>
+
+                    <div class="setting-item">
+                        <label for="thumbSizeSlider">缩略图质量</label>
+                        <input type="range" id="thumbSizeSlider" min="100" max="1000" value="400" step="50">
+                        <span id="thumbSizeValue">400px</span>
+                    </div>
+
+                    <div class="setting-item">
+                        <label id="scrollZoneLabel" for="scrollSpeedSlider"
+                            style="cursor: pointer; align-items: center; user-select: none;">
+                            感应滚动 <i id="scrollZoneIcon" class="fas fa-toggle-on"></i>
+                        </label>
+                        <input type="range" id="scrollSpeedSlider" min="0.5" max="5" value="2" step="0.1">
+                        <span id="scrollSpeedValue">2.0</span>
+                    </div>
+
+                    <div class="separator"></div>
+
+                    <div class="setting-item info-item">
+                        <label>缓存占用：</label>
+                        <span id="storageInfoValue" class="info-value">计算中...</span>
+                    </div>
+
+                    <div class="setting-item button-group">
+                        <button id="refreshBtn" class="btn-block warning" title="重新扫描整个文件目录树">重载项目</button>
+                        <button id="clearCurrentBtn" class="btn-block warning" title="删除当前视图的缓存并重新生成">重绘当前</button>
+                        <button id="cleanOldBtn" class="btn-block danger" title="清除超过20天未访问的缓存">清理过期</button>
+                        <button id="clearAllBtn" class="btn-block danger" title="删除所有缓存数据">清空全部</button>
+                    </div>
+
+                </div>
+            </div>
+
+            <header class="header">
+                <h1><i class="fas fa-images"></i> 照片浏览器</h1>
+            </header>
+
+            <div id="galleryContainer" class="gallery-container">
+            </div>
+
+            <div class="footer">
+                <p>使用提示: 拖动图片到左侧文件夹可移动。右键/点击菜单可重命名。将卡片拖到浏览器标签栏可查看原图。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗 -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <img id="modalImage" draggable="false" alt="Full view">
+        </div>
+        <div id="modalLoader" class="loader hidden"><i class="fas fa-spinner fa-spin"></i></div>
+    </div>
+
+    <!-- 右键/操作菜单 -->
+    <div id="contextMenu" class="context-menu">
+        <div class="menu-item" id="ctxProperties"><i class="fas fa-info-circle"></i> 属性</div>
+        <div class="menu-item" id="ctxRename"><i class="fas fa-edit"></i> 重命名</div>
+        <div class="menu-item delete" id="ctxDelete"><i class="fas fa-trash-alt"></i> 删除</div>
+    </div>
+
+    <!-- 属性弹窗 -->
+    <div id="propertiesModal" class="modal hidden">
+        <div class="modal-content properties-content">
+            <div class="props-header">
+                <h3>图片属性</h3>
+                <button class="close-props-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="props-body" id="propsBodyContent">
+                <!-- 动态生成内容 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 鼠标感应区 -->
+    <div id="topScrollZone" class="scrollZone top-scroll-zone"></div>
+    <div id="bottomScrollZone" class="scrollZone bottom-scroll-zone"></div>
+
+    <!-- 隐藏的文件输入 -->
+    <input type="file" id="folderInput" webkitdirectory multiple style="display: none;">
+    <!-- Toast 容器 -->
+    <div id="toastContainer"></div>
+
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/thumbnails.js"></script>
+    <script src="js/gallery.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script src="js/modal.js"></script>
+    <script src="js/filesystem.js"></script>
+    <script src="js/properties.js"></script>
+    <script src="js/scrollzone.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/main.js"></script>
+    <noscript>
+        <div
+            style="position: fixed; top: 0; left: 0; right: 0; background: #e74c3c; color: white; padding: 10px; text-align: center; z-index: 9999;">
+            JavaScript已禁用，请启用JavaScript以获得完整功能
+        </div>
+    </noscript>
+</body>
+
+</html>

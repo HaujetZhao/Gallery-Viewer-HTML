@@ -1,0 +1,198 @@
+/* 画廊容器 */
+.gallery-container {
+    min-height: 400px;
+    position: relative;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #7f8c8d;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    color: #bdc3c7;
+}
+
+.gallery-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+    align-items: flex-start;
+    width: 100%;
+}
+
+.masonry-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 0;
+}
+
+/* 图片卡片 */
+.photo-card {
+    background-color: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: none;
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+        box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    content-visibility: auto;
+    width: 100%;
+    contain-intrinsic-size: auto var(--estimated-height, 300px);
+}
+
+.photo-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+    z-index: 10;
+}
+
+.photo-card:active {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition-duration: 0.1s;
+}
+
+.photo-card.dragging {
+    opacity: 0.4;
+    border: 2px dashed #2C3E50;
+}
+
+/* 缩略图 */
+.thumbnail-container {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.thumbnail-canvas,
+.thumbnail-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background-color: #f8f9fa;
+    transition: opacity 0.3s ease;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.thumbnail-canvas[data-loading="true"],
+.thumbnail-img[data-loading="true"] {
+    opacity: 0.5;
+}
+
+/* 加载指示器 */
+.loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #2C3E50;
+    font-size: 20px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.loading-indicator i {
+    transition: none;
+}
+
+.loading-indicator.hidden {
+    display: none !important;
+}
+
+/* 卡片信息 */
+.card-info-filename {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 5px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+    color: white;
+    font-size: 12px;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+    z-index: 2;
+    min-height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.photo-card:hover .card-info-filename {
+    transform: translateY(0);
+}
+
+.card-info-meta {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 5px 5px;
+    background: linear-gradient(rgba(0, 0, 0, 0.6), transparent);
+    color: white;
+    font-size: 11px;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.photo-card:hover .card-info-meta {
+    transform: translateY(0);
+}
+
+.file-name {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-meta {
+    display: flex;
+    justify-content: space-between;
+    opacity: 0.9;
+    padding-right: 5px;
+}
+
+.file-size,
+.file-date {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.file-size i,
+.file-date i {
+    color: #ffffff;
+    font-size: 10px;
+}
+
+@media (max-width: 768px) {
+    .gallery-grid {
+        gap: 5px;
+    }
+
+    .masonry-col {
+        gap: 5px;
+    }
+}

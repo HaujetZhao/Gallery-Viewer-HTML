@@ -1,0 +1,221 @@
+/* 侧边栏容器 */
+#sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    z-index: 900;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: row;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+}
+
+/* 内容包裹层 */
+#sidebar-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% - 5px);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    z-index: 2;
+}
+
+/* 幽灵调整条 */
+#resize-helper {
+    min-width: 200px;
+    max-width: 80vw;
+    width: var(--sidebar-width, 280px);
+    height: 100%;
+    resize: horizontal;
+    overflow: scroll;
+    opacity: 0;
+    position: relative;
+}
+
+#resize-helper::-webkit-scrollbar {
+    width: 100px;
+    height: 100vh;
+}
+
+#resize-helper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#resize-helper::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+#sidebar:hover #resize-helper::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 侧边栏感应区：鼠标靠左显示 */
+#sidebar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -10px;
+    width: 10px;
+    height: 100%;
+    z-index: 10;
+}
+
+#sidebar:hover,
+#sidebar.pinned {
+    transform: translateX(0);
+}
+
+/* 固定按钮样式 */
+.sidebar-header {
+    padding: 15px;
+    background-color: rgba(0, 0, 0, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+}
+
+.sidebar-header h3 {
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#pinSidebarBtn {
+    background: none;
+    border: none;
+    color: #95a5a6;
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 0.2s;
+}
+
+#pinSidebarBtn:hover,
+#sidebar.pinned #pinSidebarBtn {
+    color: var(--accent-color);
+    transform: rotate(45deg);
+}
+
+/* 侧边栏内容 */
+.special-folders,
+#treeContainer {
+    padding: 10px;
+}
+
+#treeContainer {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#treeContainer::-webkit-scrollbar {
+    display: none;
+}
+
+#treeContainer ul,
+.special-folders ul {
+    list-style: none;
+}
+
+#treeContainer ul {
+    padding-left: 0;
+    border-left: none;
+}
+
+/* 子级列表 */
+.tree-sub-list {
+    padding-left: 18px !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    margin-left: 5px;
+    display: none;
+}
+
+.tree-sub-list.expanded {
+    display: block;
+}
+
+/* 根节点样式 */
+.tree-node.root-node {
+    font-weight: bold;
+    color: #ecf0f1;
+    background-color: rgba(255, 255, 255, 0.05);
+    margin-bottom: 5px;
+}
+
+#folderTreeRoot {
+    padding-left: 0;
+    border-left: none;
+}
+
+.separator-line {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.1);
+    margin: 5px 15px;
+}
+
+.tree-node {
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #bdc3c7;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tree-node:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.tree-node.active {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.tree-node.drag-over {
+    background-color: rgba(52, 152, 219, 0.4);
+    border: 1px dashed #fff;
+}
+
+/* 内联重命名输入框 */
+.renaming-input {
+    width: 100%;
+    font-size: 14px;
+    padding: 2px 4px;
+    border: 1px solid #3498db;
+    border-radius: 4px;
+    outline: none;
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+    text-align: center;
+    color: #333;
+}
+
+/* 空文件夹样式 */
+.tree-node.empty-folder {
+    opacity: 0.6;
+    color: #7f8c8d;
+}
+
+.tree-node.empty-folder i {
+    color: #95a5a6;
+}
+
+@media (max-width: 768px) {
+    #sidebar {
+        width: 100%;
+        max-width: 300px;
+    }
+}
