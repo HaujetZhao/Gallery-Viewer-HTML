@@ -17,6 +17,7 @@ async function openFolderPicker() {
         UI.treeRoot.innerHTML = '';
 
         const rootData = await scanDirectory(handle, handle.name);
+
         createRootNode(rootData);
         loadFolder(handle.name);
         startBackgroundScan(handle, handle.name);
@@ -29,49 +30,102 @@ async function openFolderPicker() {
     }
 }
 
+// 深度复用：在现有容器上执行增删改查
 async function scanDirectory(dirHandle, path) {
-    const filesData = [];
-    const subFolderHandles = [];
+    // 1. 获取或初始化容器
+    let folderData = getFolderData(dirHandle, path);
 
+    const newFiles = [];
+    const newSubFolders = [];
+
+    // 建立旧文件索引 (用于复用)
+    const oldFileMap = new Map(folderData.files.map(f => [f.name, f]));
+    
     for await (const entry of dirHandle.values()) {
-        if (entry.kind === 'file') {
-            const ext = entry.name.split('.').pop().toLowerCase();
-            if (imageExtensions.includes(ext)) {
-                try {
-                    const file = await entry.getFile();
-                    filesData.push({
-                        handle: entry,
-                        file: file,
-                        name: entry.name,
-                        path: path + '/' + entry.name,
-                        size: file.size,
-                        lastModified: file.lastModified,
-                        blobUrl: URL.createObjectURL(file),
-                        dom: null,
-                        md5: null
-                    });
-                } catch (e) { console.warn("无法读取文件:", entry.name, e); }
+        if (entry.kind !== 'file') continue;
+        const ext = entry.name.split('.').pop().toLowerCase();
+        if (!imageExtensions.includes(ext)) continue;
+        try {
+            const file = await entry.getFile();         // 对文件条目生成 File 对象
+            let fileObj = oldFileMap.get(entry.name);   // 尝试得到旧的 File 对象
+
+            if (fileObj) {
+                // 检查是否发生变化
+                if (fileObj.size === file.size && fileObj.lastModified === file.lastModified) {
+                    // 完全没变：刷新 handle 即可
+                    fileObj.handle = entry;
+                } else {
+                    // 变了：修改属性，释放旧资源
+                    if (fileObj.blobUrl) URL.revokeObjectURL(fileObj.blobUrl);
+                    fileObj.file = file;
+                    fileObj.size = file.size;
+                    fileObj.lastModified = file.lastModified;
+                    fileObj.handle = entry;
+                    fileObj.blobUrl = URL.createObjectURL(file);
+                    fileObj.md5 = null;
+                }
+                // 从 oldMap 中移除，标记为已处理
+                oldFileMap.delete(entry.name);
+            } else {
+                // 这是新文件，创建新对象
+                fileObj = {
+                    handle: entry,
+                    file: file,
+                    name: entry.name,
+                    path: path + '/' + entry.name,
+                    size: file.size,
+                    lastModified: file.lastModified,
+                    blobUrl: URL.createObjectURL(file), // 新生成
+                    dom: null,
+                    md5: null
+                };
             }
-        } else if (entry.kind === 'directory') {
-            subFolderHandles.push(entry);
-        }
+            newFiles.push(fileObj);
+
+        } catch (e) { console.warn("无法读取文件:", entry.name, e); }
     }
 
-    subFolderHandles.sort((a, b) => a.name.localeCompare(b.name));
-    filesData.sort((a, b) => a.name.localeCompare(b.name));
+    for await (const entry of dirHandle.values()) {
+        if (entry.kind !== 'directory') continue;
+        newSubFolders.push(entry);
+    }
 
-    const data = {
-        handle: dirHandle,
-        files: filesData,
-        subFolders: subFolderHandles,
-        doms: [],
-        scanned: true
-    };
+    // 处理被删除的文件（剩余在 oldFileMap 中的）
+    for (const [name, deletedFile] of oldFileMap) {
+        if (deletedFile.blobUrl) URL.revokeObjectURL(deletedFile.blobUrl);
+    }
 
-    appState.foldersData.set(path, data);
-    appState.dirMap.set(path, dirHandle);
+    // 排序
+    newSubFolders.sort((a, b) => a.name.localeCompare(b.name));
+    newFiles.sort((a, b) => a.name.localeCompare(b.name));
 
-    return data;
+    // 原地更新容器
+    folderData.files = newFiles;
+    folderData.subFolders = newSubFolders;
+    folderData.scanned = true;
+
+    return folderData;
+}
+
+function getFolderData(dirHandle, path) {
+    let folderData = appState.foldersData.get(path);
+    if (folderData) {
+        // 更新 handle (防止旧句柄失效)
+        folderData.handle = dirHandle;
+        appState.dirMap.set(path, dirHandle);
+    } else {
+        folderData = {
+            handle: dirHandle, // 这一步可能更新 handle
+            files: [],
+            subFolders: [],
+            doms: [],
+            scanned: false
+        };
+        // 放入状态管理 (如果是新创建的)
+        appState.foldersData.set(path, folderData);
+        appState.dirMap.set(path, dirHandle);
+    }
+    return folderData;
 }
 
 async function startBackgroundScan(parentHandle, parentPath) {
@@ -80,7 +134,9 @@ async function startBackgroundScan(parentHandle, parentPath) {
 
     for (const subHandle of currentData.subFolders) {
         const subPath = parentPath + '/' + subHandle.name;
+        // scanDirectory 会自动处理状态更新和复用
         await scanDirectory(subHandle, subPath);
+
         updateTreeWithSubFolder(parentPath, subHandle.name, subPath);
         // Yield to UI
         await new Promise(r => setTimeout(r, 0));
@@ -92,7 +148,7 @@ async function handleFolderClick(path, li) { // Removed ul param
     if (!path || !li) return;
     loadFolder(path);
     // toggleFolderState(li, ul); // Moved to sidebar delegation logic
-    await refreshCurrentFolder(true);
+    await refreshFolder(path, true);
 }
 
 function loadFolder(path) {
@@ -149,109 +205,60 @@ async function handleRefreshAction() {
             reloadProject();
         }
     } else {
-        await refreshCurrentFolder();
+        await refreshFolder(appState.currentPath);
     }
 }
 
-async function refreshCurrentFolder(silent = false) {
-    const currentPath = appState.currentPath;
-    let oldData = appState.foldersData.get(currentPath); // 保存旧数据引用
-
+async function refreshFolder(folderPath, silent = false) {
     if (!appState.rootHandle) {
         if (!silent) showToast("无法刷新：未找到目录信息", "error");
         return;
     }
-    if (!silent) showToast("正在刷新...", "info");
+
+    // 只有在刷新当前目录时才提示
+    const isCurrent = (folderPath === appState.currentPath);
+    if (isCurrent && !silent) showToast("正在刷新...", "info");
 
     try {
-        const handle = oldData ? oldData.handle : null;
-        if (!handle) throw new Error("目录句柄丢失");
+        let folderData = appState.foldersData.get(folderPath); // 获取现有引用
+        let handle = folderData ? folderData.handle : null;
 
-        // scanDirectory 会更新 appState 中的数据为 newData
-        const newData = await scanDirectory(handle, currentPath);
-
-        let hasChanges = false;
-
-        if (!oldData) {
-            hasChanges = true;
-        } else {
-            // 1. 检查子文件夹变化
-            if (oldData.subFolders.length !== newData.subFolders.length) hasChanges = true;
-            else {
-                for (let i = 0; i < newData.subFolders.length; i++) {
-                    if (newData.subFolders[i].name !== oldData.subFolders[i].name) {
-                        hasChanges = true; break;
-                    }
-                }
-            }
-
-            // 2. 检查文件变化 & 尝试复用
-            if (newData.files.length !== oldData.files.length) hasChanges = true;
-
-            // 建立旧文件索引
-            const oldFileMap = new Map(oldData.files.map(f => [f.name, f]));
-
-            for (const newFile of newData.files) {
-                const oldFile = oldFileMap.get(newFile.name);
-
-                // 判断是否为同一文件且未修改 (大小和修改时间一致)
-                if (oldFile && oldFile.size === newFile.size && oldFile.lastModified === newFile.lastModified) {
-                    // !!! 关键复用逻辑 !!!
-                    // 释放新生成的 blobUrl (因为它和旧的是一样的)
-                    if (newFile.blobUrl) URL.revokeObjectURL(newFile.blobUrl);
-
-                    // 复用旧对象的资源
-                    newFile.blobUrl = oldFile.blobUrl;
-                    newFile.dom = oldFile.dom; // 复用 DOM，避免闪烁
-                    newFile.md5 = oldFile.md5;
-                    // 如果 DOM 存在，需要更新其绑定的 fileData 引用，否则 DOM 上的 fileData 还是指向 oldFile 的
-                    if (newFile.dom) {
-                        newFile.dom.fileData = newFile;
-                        // 更新缩略图元素的 fileData 引用
-                        const media = newFile.dom.querySelector('.thumbnail-img, .thumbnail-canvas');
-                        if (media) media.fileData = newFile;
-                    }
-
-                } else {
-                    // 只要有一个文件不匹配（新增、修改、改名），就视为有变化
-                    hasChanges = true;
-                }
-            }
+        if (!handle) {
+            // 尝试从 rootHandle 恢复（如果是根目录）
+            if (folderPath === appState.rootHandle.name) handle = appState.rootHandle;
+            else throw new Error("目录句柄丢失");
         }
 
-        if (hasChanges) {
-            loadFolder(currentPath);
-        } else {
-            // 如果完全没变化，为了保持排序状态和 DOM 稳定性
-            // 我们其实可以把 appState 还原回 oldData (如果排序没变的话)
-            // 但 scanDirectory 返回的是按名称排序的，如果用户当前是按名称排序，那无所谓。
-            // 如果用户当前是按大小排序，newData 是乱的。
-            // 简单策略：如果没变化，不调用 loadFolder，保留 appState 指向 newData (拥有复用的资源)。
-            // 但必须更新 globals.currentDisplayList 吗？
-            // 不，如果不 loadFolder，UI 还是旧的。
-            // 最好的体验是：如果没内容变化，连 appState 都回滚回 oldData，这样排序状态也都不变。
-            if (oldData) {
-                appState.foldersData.set(currentPath, oldData);
-                // 此时 newData 里的 newFile 对象虽然复用了 blobUrl，但会被 GC。
-                // 我们已经在上面 revoke 了 newFile.blobUrl (其实是放弃了新生成的，保留了旧的)
-                // 因为旧的 oldData.files[i].blobUrl 还在用，所以没问题。
-            }
-            if (!silent) console.log("目录扫描完成：无变化，跳过刷新");
-        }
+        // 深度复用扫描：直接原地更新 folderData
+        await scanDirectory(handle, folderPath);
 
-        syncTreeStructure(currentPath, newData.subFolders);
-        if (!silent) showToast("目录已刷新");
+        // 更新 UI
+        updateFolderCount(folderPath);
+
+        // 重新同步子树结构（如果子文件夹有变）
+        // 注意：refreshFolder 里调用 scanDirectory 后，folderData.subFolders 已经是新的/更新过的列表
+        syncTreeStructure(folderPath, appState.foldersData.get(folderPath).subFolders);
+
+        if (isCurrent) {
+            loadFolder(folderPath);
+            if (!silent) showToast("目录已刷新");
+        }
     } catch (e) {
         if (e.name === 'NotFoundError' || (e.message && e.message.includes('not found'))) {
-            showToast(`文件夹 "${currentPath}" 已被删除`, "error");
-            removeTreeNode(currentPath);
-            UI.gallery.innerHTML = '<div class="empty-state">文件夹已失效</div>';
+            if (isCurrent) {
+                showToast(`文件夹 "${folderPath}" 已被删除`, "error");
+                UI.gallery.innerHTML = '<div class="empty-state">文件夹已失效</div>';
+            }
+            removeTreeNode(folderPath);
+            appState.foldersData.delete(folderPath);
         } else {
             console.error("刷新失败", e);
             if (!silent) showToast("刷新失败: " + e.message, "error");
         }
     }
 }
+
+
 
 async function reloadProject() {
     if (!appState.rootHandle) {
@@ -267,6 +274,7 @@ async function reloadProject() {
         appState.dirMap.clear();
 
         const rootData = await scanDirectory(handle, handle.name);
+
         createRootNode(rootData);
         loadFolder(handle.name);
         startBackgroundScan(handle, handle.name);
@@ -300,16 +308,13 @@ async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
 
         showToast(`已移动: ${data.name}`, "success");
 
-        const idx = sourceCache.files.indexOf(sourceFile);
-        if (idx > -1) {
-            sourceCache.files.splice(idx, 1);
-        }
+        // 刷新源目录 和 目标目录
+        // 因为 refreshFolder 是 "smart" 的，会原地更新数据并复用，所以性能开销可控
+        await refreshFolder(data.sourceDir, true);
 
-        const targetCache = appState.foldersData.get(targetPath);
-        if (targetCache) {
-            if (appState.currentPath === targetPath) {
-                await refreshCurrentFolder(true);
-            }
+        const folderData = appState.foldersData.get(targetPath);
+        if (folderData && folderData.scanned) {
+            await refreshFolder(targetPath, true);
         }
 
         if (appState.currentPath === data.sourceDir) {

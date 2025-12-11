@@ -44,7 +44,14 @@ function getObserver() {
 
 function unobserveAll() {
     if (observer) observer.disconnect();
-    thumbQueue.waiting = [];
+    while (thumbQueue.waiting.length > 0) {
+        const task = thumbQueue.waiting.pop();
+        if (task && task.el) {
+            task.el.dataset.loading = 'false';
+            const loaderIcon = task.el.parentElement.querySelector('.loading-indicator i');
+            if (loaderIcon) loaderIcon.classList.remove('fa-spin');
+        }
+    }
 }
 
 function redrawAllThumbnails(force) {

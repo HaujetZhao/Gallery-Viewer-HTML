@@ -73,7 +73,7 @@ function renderGallery(fileList) {
         });
     }
 
-    updateFolderIconState(displayFiles.length);
+    updateFolderIconState(appState.currentPath);
 }
 
 function renderGalleryFromCache() {
@@ -133,16 +133,7 @@ function createPhotoCard(fileData) {
     return card;
 }
 
-function updateFolderIconState(count) {
-    const activeNode = document.querySelector('.tree-node.active');
-    if (activeNode && appState.currentPath !== 'ALL_PHOTOS') {
-        if (count === 0) {
-            activeNode.classList.add('empty-folder');
-        } else {
-            activeNode.classList.remove('empty-folder');
-        }
-    }
-}
+
 
 function handleDragStart(e) {
     const card = e.target.closest('.photo-card');

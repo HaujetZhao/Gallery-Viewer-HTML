@@ -120,7 +120,9 @@ function createRootNode(rootData) {
     li.className = 'tree-node root-node active';
     li.dataset.path = rootData.handle.name;
     li.id = 'tree-root-node';
-    li.innerHTML = `<i class="fas fa-folder-open"></i> ${rootData.handle.name}`;
+    // Add count for root too
+    const count = rootData.files ? rootData.files.length : 0;
+    li.innerHTML = `<i class="fas fa-folder-open"></i> ${rootData.handle.name} <span class="tree-node-count">(${count})</span>`;
 
     const ul = document.createElement('ul');
     ul.className = 'tree-sub-list expanded';
@@ -145,7 +147,7 @@ function updateTreeWithSubFolder(parentPath, folderName, fullPath) {
     li.dataset.path = fullPath;
 
     const count = folderData.files.length;
-    li.innerHTML = `<i class="fas fa-folder-open"></i> ${folderName} <span style="font-size:0.8em; opacity:0.6; margin-left:4px;">(${count})</span>`;
+    li.innerHTML = `<i class="fas fa-folder-open"></i> ${folderName} <span class="tree-node-count">(${count})</span>`;
 
     const ul = document.createElement('ul');
     ul.className = 'tree-sub-list expanded';
@@ -155,6 +157,35 @@ function updateTreeWithSubFolder(parentPath, folderName, fullPath) {
 
     parentUl.appendChild(li);
     parentUl.appendChild(ul);
+}
+
+function updateFolderCount(path) {
+    const li = document.querySelector(`li.tree-node[data-path="${CSS.escape(path)}"]`);
+    if (!li) return;
+
+    // 查找或创建计数 span (优先找带 class 的，否则找任意 span)
+    let countSpan = li.querySelector('.tree-node-count') || li.querySelector('span');
+
+    if (!countSpan) {
+        countSpan = document.createElement('span');
+        countSpan.className = 'tree-node-count';
+        li.appendChild(countSpan);
+    } else {
+        // 确保 class 存在 (兼容旧元素)
+        if (!countSpan.classList.contains('tree-node-count')) {
+            countSpan.classList.add('tree-node-count');
+            countSpan.style.cssText = ''; // 清除之前的内联样式
+        }
+    }
+
+    // 此时无需传入 count，直接从全局数据拿
+    const data = appState.foldersData.get(path);
+    if (data) {
+        if (data.files) {
+            countSpan.textContent = `(${data.files.length})`;
+        }
+        updateFolderIconState(path);
+    }
 }
 
 function updateActiveTreeNode(path) {
@@ -221,5 +252,25 @@ function removeTreeNode(path) {
         const ul = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
         if (ul) ul.remove();
         li.remove();
+    }
+}
+
+function updateFolderIconState(path) {
+    const li = document.querySelector(`li.tree-node[data-path="${CSS.escape(path)}"]`);
+    if (!li) return;
+
+    // 如果是 ALL_PHOTOS 特殊节点，通常不用处理 empty-folder 样式，或者有单独逻辑
+    if (path === 'ALL_PHOTOS') return;
+
+    const data = appState.foldersData.get(path);
+    if (!data) return; // 数据尚未加载
+
+    const isEmpty = (!data.files || data.files.length === 0) &&
+        (!data.subFolders || data.subFolders.length === 0);
+
+    if (isEmpty) {
+        li.classList.add('empty-folder');
+    } else {
+        li.classList.remove('empty-folder');
     }
 }

@@ -213,6 +213,13 @@
     color: #95a5a6;
 }
 
+.tree-node-count {
+    font-size: 0.8em;
+    opacity: 0.6;
+    margin-left: 4px;
+}
+
+
 @media (max-width: 768px) {
     #sidebar {
         width: 100%;
