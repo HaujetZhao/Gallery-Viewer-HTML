@@ -73,7 +73,10 @@ function renderProperties(fileData, dim, tags) {
     basicSection.innerHTML = `
         <h4>基本信息</h4>
         <table class="props-table">
-            <tr><td>文件名</td><td>${fileData.name}</td></tr>
+            <tr>
+                <td>文件名</td>
+                <td class="editable-filename" style="cursor: pointer; color: #3498db;" title="点击编辑">${fileData.name}</td>
+            </tr>
             <tr><td>路径</td><td style="word-break: break-all;">${fileData.path || fileData.webkitRelativePath || fileData.name}</td></tr>
             <tr><td>分辨率</td><td>${dim.w > 0 ? `${dim.w} x ${dim.h}` : '未知'}</td></tr>
             <tr><td>大小</td><td>${formatBytes(fileData.size)}</td></tr>
@@ -81,6 +84,12 @@ function renderProperties(fileData, dim, tags) {
         </table>
     `;
     container.appendChild(basicSection);
+
+    // 添加文件名编辑功能
+    const filenameCell = basicSection.querySelector('.editable-filename');
+    filenameCell.addEventListener('click', () => {
+        enablePropertiesRename(filenameCell, fileData);
+    });
 
     // 计算 GPS
     let gpsHTML = null;
@@ -266,4 +275,82 @@ function transformLon(x, y) {
 
 function outOfChina(lon, lat) {
     return !(lon > 73.66 && lon < 135.05 && lat > 3.86 && lat < 53.55);
+}
+
+function enablePropertiesRename(cell, fileData) {
+    const oldName = fileData.name;
+    const originalText = cell.textContent;
+
+    const input = document.createElement('textarea');
+    input.value = oldName;
+    input.className = 'renaming-input';
+    input.rows = 1;
+    input.style.width = '100%';
+    input.style.minWidth = '200px';
+
+    cell.textContent = '';
+    cell.appendChild(input);
+    input.focus();
+
+    // 选中文件名部分（不含扩展名）
+    const dotIndex = oldName.lastIndexOf('.');
+    if (dotIndex > 0) {
+        input.setSelectionRange(0, dotIndex);
+    } else {
+        input.select();
+    }
+
+    // 自动调整高度
+    const autoResize = () => {
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
+    };
+    input.addEventListener('input', autoResize);
+    autoResize();
+
+    const commit = async () => {
+        const newName = input.value.trim().replace(/\n/g, '');
+        if (!newName || newName === oldName) {
+            cleanup();
+            return;
+        }
+        if (/[<>:"/\\|?*]/.test(newName)) {
+            showToast("文件名包含非法字符", "error");
+            input.focus();
+            return;
+        }
+        try {
+            await fileData.handle.move(newName);
+            fileData.name = newName;
+            fileData.path = fileData.path.replace(/[^/]+$/, newName);
+
+            // 更新卡片显示
+            if (fileData.dom) {
+                const cardNameEl = fileData.dom.querySelector('.file-name');
+                if (cardNameEl) cardNameEl.textContent = newName;
+            }
+
+            cell.textContent = newName;
+            showToast("重命名成功");
+        } catch (e) {
+            showToast("重命名失败: " + e.message, "error");
+            cell.textContent = originalText;
+        }
+    };
+
+    const cleanup = () => {
+        cell.textContent = fileData.name;
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            input.blur();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cleanup();
+        }
+        e.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
 }

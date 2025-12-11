@@ -194,14 +194,19 @@
 .renaming-input {
     width: 100%;
     font-size: 14px;
-    padding: 2px 4px;
+    padding: 4px 6px;
     border: 1px solid #3498db;
     border-radius: 4px;
     outline: none;
     box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
-    text-align: center;
     color: #333;
+    resize: none;
+    overflow: hidden;
+    min-height: 24px;
+    line-height: 1.4;
+    font-family: inherit;
 }
+
 
 /* 空文件夹样式 */
 .tree-node.empty-folder {

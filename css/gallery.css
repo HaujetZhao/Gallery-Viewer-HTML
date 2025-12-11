@@ -49,13 +49,14 @@
     contain-intrinsic-size: auto var(--estimated-height, 300px);
 }
 
-.photo-card:hover {
+.photo-card:hover,
+.photo-card.renaming {
     transform: translateY(-6px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
     z-index: 10;
 }
 
-.photo-card:active {
+.photo-card:active:not(.renaming) {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     transition-duration: 0.1s;
@@ -133,7 +134,8 @@
     justify-content: center;
 }
 
-.photo-card:hover .card-info-filename {
+.photo-card:hover .card-info-filename,
+.photo-card.renaming .card-info-filename {
     transform: translateY(0);
 }
 
@@ -152,7 +154,8 @@
     pointer-events: none;
 }
 
-.photo-card:hover .card-info-meta {
+.photo-card:hover .card-info-meta,
+.photo-card.renaming .card-info-meta {
     transform: translateY(0);
 }
 

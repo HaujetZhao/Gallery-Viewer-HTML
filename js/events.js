@@ -214,21 +214,41 @@ function enableInlineRename(card, fileData) {
     const nameEl = card.querySelector('.file-name');
     const oldName = fileData.name;
 
-    const input = document.createElement('input');
-    input.type = 'text';
+    // 禁用卡片拖动
+    card.draggable = false;
+    // 添加重命名状态类，防止 hover 状态丢失
+    card.classList.add('renaming');
+
+    const input = document.createElement('textarea');
     input.value = oldName;
     input.className = 'renaming-input';
+    input.rows = 1;
 
     nameEl.style.display = 'none';
     nameContainer.appendChild(input);
     input.focus();
-    input.setSelectionRange(0, oldName.lastIndexOf('.'));
+
+    // 选中文件名部分（不含扩展名）
+    const dotIndex = oldName.lastIndexOf('.');
+    if (dotIndex > 0) {
+        input.setSelectionRange(0, dotIndex);
+    } else {
+        input.select();
+    }
+
+    // 自动调整高度
+    const autoResize = () => {
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
+    };
+    input.addEventListener('input', autoResize);
+    autoResize();
 
     input.addEventListener('click', e => e.stopPropagation());
     input.addEventListener('dblclick', e => e.stopPropagation());
 
     const commit = async () => {
-        const newName = input.value.trim();
+        const newName = input.value.trim().replace(/\n/g, ''); // 移除换行符
         if (!newName || newName === oldName) { cleanup(); return; }
         if (/[<>:"/\\|?*]/.test(newName)) {
             showToast("文件名包含非法字符", "error");
@@ -251,11 +271,19 @@ function enableInlineRename(card, fileData) {
     const cleanup = () => {
         input.remove();
         nameEl.style.display = 'block';
+        card.draggable = true;
+        card.classList.remove('renaming');
     };
 
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        else if (e.key === 'Escape') { e.preventDefault(); cleanup(); }
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            input.blur();
+        }
+        else if (e.key === 'Escape') {
+            e.preventDefault();
+            cleanup();
+        }
         e.stopPropagation();
     });
     input.addEventListener('blur', commit);
@@ -276,7 +304,7 @@ async function handleDelete() {
         appState.deleteHistory.push(deleteInfo);
 
         // 刷新文件夹
-        refreshFolder(appState.currentPath, silent=true);
+        refreshFolder(appState.currentPath, silent = true);
 
         showToast("已移动到 .trash 回收站");
     } catch (e) {
