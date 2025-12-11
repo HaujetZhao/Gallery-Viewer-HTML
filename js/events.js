@@ -152,6 +152,10 @@ function handleKeyDown(e) {
             if (appState.rootHandle) openFolderPicker();
             else UI.folderInput.click();
         }
+        if (isCtrl && key === 'z') {
+            e.preventDefault();
+            handleUndo();
+        }
     }
     if (e.key === 'Escape') {
         if (UI.settingBar.classList.contains('show')) hideSettingsModal();
@@ -264,12 +268,40 @@ async function handleDelete() {
     if (!confirm(`确定要将 "${fileData.name}" 放入回收站吗？`)) return;
 
     try {
-        const parentPath = await moveFileToTrash(fileData);
+        const deleteInfo = await moveFileToTrash(fileData);
         fileData.dom.remove();
-        updateFolderCount(parentPath);
+        updateFolderCount(deleteInfo.parentPath);
+
+        // 保存删除信息到历史记录
+        appState.deleteHistory.push(deleteInfo);
+
         showToast("已移动到 .trash 回收站");
     } catch (e) {
         console.error(e);
         showToast("操作失败: " + e.message, "error");
+    }
+}
+
+async function handleUndo() {
+    if (appState.deleteHistory.length === 0) {
+        showToast("没有可撤销的删除操作", "info");
+        return;
+    }
+
+    const deleteInfo = appState.deleteHistory.pop();
+
+    try {
+        const restoredName = await restoreFromTrash(deleteInfo);
+        showToast(`已恢复: ${restoredName}`, "success");
+
+        // 如果当前在该文件夹，刷新显示
+        if (appState.currentPath === deleteInfo.parentPath) {
+            renderGallery(globals.currentDisplayList);
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("恢复失败: " + e.message, "error");
+        // 恢复失败，把记录放回去
+        appState.deleteHistory.push(deleteInfo);
     }
 }

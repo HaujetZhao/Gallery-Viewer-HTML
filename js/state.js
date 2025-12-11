@@ -3,7 +3,8 @@ const appState = {
     currentPath: null,
     foldersData: new Map(),
     allPhotosMode: false,
-    dirMap: new Map()
+    dirMap: new Map(),
+    deleteHistory: []
 };
 
 const globals = {

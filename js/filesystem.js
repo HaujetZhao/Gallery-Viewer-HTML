@@ -394,5 +394,27 @@ async function moveFileToTrash(fileData) {
     const listIdx = globals.currentDisplayList.indexOf(fileData);
     if (listIdx > -1) globals.currentDisplayList.splice(listIdx, 1);
 
-    return parentPath;
+    // 5. 返回删除信息用于撤销
+    return {
+        parentPath,
+        originalName: fileData.name,
+        trashName: targetName,
+        trashHandle,
+        parentHandle: parentCache.handle
+    };
+}
+
+async function restoreFromTrash(deleteInfo) {
+    const { parentPath, originalName, trashName, trashHandle, parentHandle } = deleteInfo;
+
+    // 1. 获取回收站中的文件句柄
+    const fileHandle = await trashHandle.getFileHandle(trashName);
+
+    // 2. 移动回原位置
+    await fileHandle.move(parentHandle, originalName);
+
+    // 3. 刷新父文件夹以更新数据
+    await refreshFolder(parentPath, true);
+
+    return originalName;
 }
