@@ -1,4 +1,3 @@
-// 移除 imports
 
 async function init() {
     try {

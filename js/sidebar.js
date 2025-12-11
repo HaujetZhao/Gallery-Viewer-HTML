@@ -1,4 +1,3 @@
-// 移除 imports
 
 function toggleSidebarPin(forceState) {
     const isPinned = typeof forceState === 'boolean' ? forceState : !UI.sidebar.classList.contains('pinned');

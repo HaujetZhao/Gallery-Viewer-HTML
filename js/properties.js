@@ -1,4 +1,3 @@
-// 移除 imports
 
 const EXIF_MAP = {
     'Make': '制造商', 'Model': '型号', 'LensModel': '镜头', 'Software': '后期软件',

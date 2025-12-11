@@ -1,4 +1,3 @@
-// 移除 imports并将变量导出
 
 let scrollZoneEnabled = true;
 let scrollZoneSpeed = 1.0;

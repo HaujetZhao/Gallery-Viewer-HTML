@@ -1,4 +1,4 @@
-// 移除 imports
+
 
 const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
 

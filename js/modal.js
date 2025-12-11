@@ -1,4 +1,3 @@
-// 移除 imports
 
 const modalState = {
     isOpen: false,

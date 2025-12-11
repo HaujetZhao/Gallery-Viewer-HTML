@@ -1,5 +1,3 @@
-// 移除 imports，改为依赖全局定义的 UI.showToast
-
 const DB_NAME = 'PhotoViewerDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'thumbnails';
