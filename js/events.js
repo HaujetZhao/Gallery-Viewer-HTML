@@ -1,4 +1,3 @@
-// 移除 imports
 
 function setupEventListeners() {
     document.querySelector('.intro-content').addEventListener('click', openFolderPicker);
@@ -45,25 +44,17 @@ function setupEventListeners() {
     document.getElementById('thumbSizeSlider').addEventListener('change', () => redrawAllThumbnails(true));
 
     setupSettingsDrag();
-    setupModalEvents(); // from modal.js
+    setupModalEvents();
 
     document.addEventListener('keydown', handleKeyDown);
 
-    // Gallery delegation is already in place
     UI.gallery.addEventListener('click', handleGalleryClick);
     UI.gallery.addEventListener('contextmenu', handleContextMenu);
-    UI.gallery.addEventListener('dragstart', handleDragStart); // This is also delegation on container
+    UI.gallery.addEventListener('dragstart', handleDragStart);
 
-    // Additional delegation opportunity: Context Menu Actions
-    // Instead of multiple IDs, we could have one listener on the menu itself if items were dynamic
-    // But they are static IDs, so current approach is fine.
-
-    // We can also delegate Settings Modal clicks
     UI.settingBar.addEventListener('click', (e) => {
-        // Handle clicks inside settings if we had many buttons
     });
 
-    // Context Menu
     const ctxRename = document.getElementById('ctxRename');
     const ctxDelete = document.getElementById('ctxDelete');
     const ctxProperties = document.getElementById('ctxProperties');
@@ -80,14 +71,12 @@ function setupEventListeners() {
         const fileData = globals.currentDisplayList[idx];
         if (fileData) {
             UI.contextMenu.classList.remove('show');
-            // Lazy import or keep logic here? enableInlineRename is small
             enableInlineRename(fileData.dom, fileData);
         }
     });
 
     document.getElementById('ctxDelete').addEventListener('click', handleDelete);
 
-    // Props close
     const closePropsBtn = document.querySelector('.close-props-btn');
     const propsModal = document.getElementById('propertiesModal');
     if (closePropsBtn && propsModal) {
@@ -275,33 +264,32 @@ async function handleDelete() {
     if (!confirm(`确定要删除 "${fileData.name}" 吗？`)) return;
 
     try {
-        let parentDirHandle;
-        if (appState.allPhotosMode) {
-            const pathParts = fileData.path.split('/');
-            pathParts.pop();
-            const parentPath = pathParts.join('/');
-            const cache = appState.foldersData.get(parentPath);
-            parentDirHandle = cache ? cache.handle : null;
-        } else {
-            const cache = appState.foldersData.get(appState.currentPath);
-            parentDirHandle = cache.handle;
-        }
-
-        if (!parentDirHandle) throw new Error("无法定位父文件夹");
-        await parentDirHandle.removeEntry(fileData.name);
-        fileData.dom.remove();
-
+        // 计算父路径并获取缓存
         const pathParts = fileData.path.split('/');
         pathParts.pop();
         const parentPath = pathParts.join('/');
-        const sourceCache = appState.foldersData.get(parentPath);
-        if (sourceCache && sourceCache.files) {
-            const i = sourceCache.files.indexOf(fileData);
-            if (i > -1) sourceCache.files.splice(i, 1);
+        const parentCache = appState.foldersData.get(
+            appState.allPhotosMode ? parentPath : appState.currentPath
+        );
+
+        if (!parentCache?.handle) throw new Error("无法定位父文件夹");
+
+        // 删除文件
+        await parentCache.handle.removeEntry(fileData.name);
+        fileData.dom.remove();
+
+        // 更新缓存中的文件列表
+        if (parentCache.files) {
+            const i = parentCache.files.indexOf(fileData);
+            if (i > -1) parentCache.files.splice(i, 1);
         }
 
+        // 更新当前显示列表
         const listIdx = globals.currentDisplayList.indexOf(fileData);
         if (listIdx > -1) globals.currentDisplayList.splice(listIdx, 1);
+
+        // 更新文件夹计数
+        updateFolderCount(parentPath);
 
         showToast("文件已删除");
     } catch (e) {
