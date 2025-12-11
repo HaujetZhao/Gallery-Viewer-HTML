@@ -50,41 +50,28 @@ function setupCSSBasedResizer() {
     setWidth(savedWidth);
 }
 
-// ----------------------------------------------------
-// Event Delegation Setup needed in init or sidebar load
-// We'll export a setup function for sidebar events
-// ----------------------------------------------------
 function setupSidebarEvents() {
     UI.treeRoot.addEventListener('click', (e) => {
-        // Find the closest tree node li
         const li = e.target.closest('li.tree-node');
         if (!li) return;
 
-        e.stopPropagation(); // Stop bubbling to prevent issues?
+        e.stopPropagation();
 
         const path = li.dataset.path;
         if (!path) return;
 
-        // Determine if click was inside the icon area for toggle
-        // The icon is usually the first child i tag.
-        // Or we can check if the target IS the icon or closely wrapping span.
-
         const isIconClick = e.target.classList.contains('fa-folder') ||
             e.target.classList.contains('fa-folder-open');
 
-        // Logic: Always load folder on click anywhere on line
-        // Only toggle expand/collapse if computing isIconClick
-
         const ul = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
 
-        handleFolderClick(path, li); // Load folder
+        handleFolderClick(path, li);
 
         if (isIconClick && ul) {
             toggleFolderState(li, ul);
         }
     });
 
-    // Drag and Drop Delegation
     UI.treeRoot.addEventListener('dragover', (e) => {
         const li = e.target.closest('li.tree-node');
         if (li) {
@@ -119,7 +106,6 @@ function createRootNode(rootData) {
     li.className = 'tree-node root-node active';
     li.dataset.path = rootData.handle.name;
     li.id = 'tree-root-node';
-    // Add count for root too
     const count = rootData.files ? rootData.files.length : 0;
     li.innerHTML = `<i class="fas fa-folder-open"></i> ${rootData.handle.name} <span class="tree-node-count">(${count})</span>`;
 
@@ -127,7 +113,6 @@ function createRootNode(rootData) {
     ul.className = 'tree-sub-list expanded';
     ul.dataset.parentPath = rootData.handle.name;
 
-    // No individual listeners added here anymore
 
     UI.treeRoot.appendChild(li);
     UI.treeRoot.appendChild(ul);
@@ -151,8 +136,6 @@ function updateTreeWithSubFolder(parentPath, folderName, fullPath) {
     const ul = document.createElement('ul');
     ul.className = 'tree-sub-list expanded';
     ul.dataset.parentPath = fullPath;
-
-    // No individual listeners added here anymore
 
     parentUl.appendChild(li);
     parentUl.appendChild(ul);

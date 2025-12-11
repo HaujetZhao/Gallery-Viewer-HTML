@@ -7,7 +7,7 @@ async function init() {
     }
 
     setupEventListeners();
-    setupSidebarEvents(); // New delegation setup
+    setupSidebarEvents(); 
     setupIntersectionObserver();
     setupScrollZone();
     setupCSSBasedResizer();

@@ -55,7 +55,7 @@ function unobserveAll() {
 
 function redrawAllThumbnails(force) {
     unobserveAll();
-    setupIntersectionObserver(); // Re-init observer if disconnected
+    setupIntersectionObserver(); 
     document.querySelectorAll('.thumbnail-canvas, .thumbnail-img').forEach(el => {
         el.dataset.loaded = 'false';
         el.dataset.loading = 'false';
