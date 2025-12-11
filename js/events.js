@@ -67,8 +67,7 @@ function setupEventListeners() {
     }
 
     document.getElementById('ctxRename').addEventListener('click', () => {
-        const idx = parseInt(UI.contextMenu.dataset.displayIndex);
-        const fileData = globals.currentDisplayList[idx];
+        const fileData = UI.contextMenu.fileData;
         if (fileData) {
             UI.contextMenu.classList.remove('show');
             enableInlineRename(fileData.dom, fileData);
@@ -100,7 +99,11 @@ function handleContextMenu(e) {
     if (!card) return;
 
     const menu = UI.contextMenu;
-    const fileIndex = globals.currentDisplayList.findIndex(f => f.dom === card);
+
+    // 直接保存 fileData 引用（更可靠）
+    menu.fileData = card.fileData;
+
+    // 保留索引用于其他功能
     const idx = parseInt(card.dataset.currentIndex);
     menu.dataset.displayIndex = idx;
 
@@ -122,7 +125,7 @@ function handleKeyDown(e) {
         switch (e.key) {
             case 'Escape': closeModal(); break;
             case 'ArrowRight':
-                if (modalState.currentIndex < globals.currentDisplayList.length - 1) {
+                if (globals.visibleFileList && modalState.currentIndex < globals.visibleFileList.length - 1) {
                     openModalByIndex(modalState.currentIndex + 1);
                 }
                 break;
@@ -256,10 +259,15 @@ function enableInlineRename(card, fileData) {
             return;
         }
         try {
-            await fileData.handle.move(newName);
-            fileData.name = newName;
-            fileData.path = fileData.path.replace(/[^/]+$/, newName);
+            // 使用 SmartFile 的 rename 方法
+            await fileData.rename(newName);
+
+            // 更新 DOM 显示
             nameEl.textContent = newName;
+
+            // 更新 path 属性（保持兼容性）
+            fileData.path = fileData.getPath();
+
             showToast("重命名成功");
             cleanup();
         } catch (e) {
@@ -290,8 +298,7 @@ function enableInlineRename(card, fileData) {
 }
 
 async function handleDelete() {
-    const idx = parseInt(UI.contextMenu.dataset.displayIndex);
-    const fileData = globals.currentDisplayList[idx];
+    const fileData = UI.contextMenu.fileData;
     if (!fileData) return;
     if (!confirm(`确定要将 "${fileData.name}" 放入回收站吗？`)) return;
 

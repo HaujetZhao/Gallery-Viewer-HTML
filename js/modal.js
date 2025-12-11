@@ -162,38 +162,61 @@ function applyTransform() {
     UI.modalImage.style.transform = `translate(${modalState.pointX}px, ${modalState.pointY}px) scale(${modalState.scale})`;
 }
 
-function openModal(fileData) {
-    if (!fileData || !fileData.blobUrl) {
-        if (fileData && !fileData.blobUrl) {
-            fileData.handle.getFile().then(f => {
-                fileData.blobUrl = URL.createObjectURL(f);
-                openModal(fileData);
-            });
-            return;
+async function openModal(fileData) {
+    if (!fileData) return;
+
+    try {
+        // 验证文件是否可用
+        if (!fileData.blobUrl) {
+            const isValid = await fileData.validate();
+
+            if (!isValid) {
+                // 文件失效，执行恢复
+                const recovered = await handleFileNotFound(fileData);
+                if (!recovered) {
+                    showToast("无法打开图片：文件已被删除或移动", "error");
+                    return;
+                }
+                return; // 恢复后不继续打开，让用户重新选择
+            }
+
+            // 文件有效但没有 blobUrl，创建它
+            const file = await fileData.handle.getFile();
+            fileData.blobUrl = URL.createObjectURL(file);
         }
-        return;
+
+        modalState.isOpen = true;
+        // 使用 visibleFileList 获取正确的索引，支持排序和过滤
+        modalState.currentIndex = globals.visibleFileList.indexOf(fileData);
+        globals.currentImageIndex = modalState.currentIndex;
+
+        UI.modal.classList.remove('hidden');
+        UI.modalLoader.classList.remove('hidden');
+
+        resetImageTransform();
+
+        UI.modalImage.onload = () => {
+            UI.modalLoader.classList.add('hidden');
+            UI.modalImage.style.filter = 'brightness(1)';
+        };
+        UI.modalImage.style.filter = 'brightness(0.7)';
+        UI.modalImage.src = fileData.blobUrl;
+
+    } catch (err) {
+        console.error("打开图片失败:", err);
+
+        // 如果是 NotFoundError，尝试恢复
+        if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
+            await handleFileNotFound(fileData);
+        } else {
+            showToast("打开图片失败: " + err.message, "error");
+        }
     }
-
-    modalState.isOpen = true;
-    modalState.currentIndex = globals.currentDisplayList.indexOf(fileData);
-    globals.currentImageIndex = modalState.currentIndex;
-
-    UI.modal.classList.remove('hidden');
-    UI.modalLoader.classList.remove('hidden');
-
-    resetImageTransform();
-
-    UI.modalImage.onload = () => {
-        UI.modalLoader.classList.add('hidden');
-        UI.modalImage.style.filter = 'brightness(1)';
-    };
-    UI.modalImage.style.filter = 'brightness(0.7)';
-    UI.modalImage.src = fileData.blobUrl;
 }
 
 function openModalByIndex(index) {
-    if (index >= 0 && index < globals.currentDisplayList.length) {
-        openModal(globals.currentDisplayList[index]);
+    if (globals.visibleFileList && index >= 0 && index < globals.visibleFileList.length) {
+        openModal(globals.visibleFileList[index]);
     }
 }
 

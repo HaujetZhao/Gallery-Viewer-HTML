@@ -57,18 +57,18 @@ function setupSidebarEvents() {
 
         e.stopPropagation();
 
-        const path = li.dataset.path;
-        if (!path) return;
+        // 使用 WeakMap 获取 Folder 对象
+        const folderData = domToFolderMap.get(li);
+        if (!folderData) return;
 
         const isIconClick = e.target.classList.contains('fa-folder') ||
             e.target.classList.contains('fa-folder-open');
 
-        const ul = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
-
+        const path = folderData.getPath();
         handleFolderClick(path, li);
 
-        if (isIconClick && ul) {
-            toggleFolderState(li, ul);
+        if (isIconClick && folderData.treeList) {
+            toggleFolderState(li, folderData.treeList);
         }
     });
 
@@ -92,9 +92,10 @@ function setupSidebarEvents() {
         e.preventDefault();
         li.classList.remove('drag-over');
 
-        const path = li.dataset.path;
-        const folderData = appState.foldersData.get(path);
+        // 使用 WeakMap 获取 Folder 对象
+        const folderData = domToFolderMap.get(li);
         if (folderData) {
+            const path = folderData.getPath();
             handleDropOnFolder(e, folderData.handle, path, li);
         }
     });
@@ -113,17 +114,28 @@ function createRootNode(rootData) {
     ul.className = 'tree-sub-list expanded';
     ul.dataset.parentPath = rootData.handle.name;
 
+    // 建立双向绑定（使用 WeakMap）
+    rootData.treeNode = li;
+    rootData.treeList = ul;
+    domToFolderMap.set(li, rootData);
+    domToFolderMap.set(ul, rootData);
 
     UI.treeRoot.appendChild(li);
     UI.treeRoot.appendChild(ul);
 }
 
 function updateTreeWithSubFolder(parentPath, folderName, fullPath) {
-    const parentUl = document.querySelector(`ul[data-parent-path="${CSS.escape(parentPath)}"]`);
-    if (!parentUl) return;
+    const parentFolder = appState.foldersData.get(parentPath);
+    if (!parentFolder || !parentFolder.treeList) return;
+
+    const parentUl = parentFolder.treeList;
+
+    // 检查是否已存在
     if (parentUl.querySelector(`li[data-path="${CSS.escape(fullPath)}"]`)) return;
 
     const folderData = appState.foldersData.get(fullPath);
+    if (!folderData) return;
+
     const isEmpty = folderData.files.length === 0 && folderData.subFolders.length === 0;
 
     const li = document.createElement('li');
@@ -137,122 +149,167 @@ function updateTreeWithSubFolder(parentPath, folderName, fullPath) {
     ul.className = 'tree-sub-list expanded';
     ul.dataset.parentPath = fullPath;
 
-    parentUl.appendChild(li);
-    parentUl.appendChild(ul);
-}
+    // 建立双向绑定（使用 WeakMap）
+    folderData.treeNode = li;
+    folderData.treeList = ul;
+    domToFolderMap.set(li, folderData);
+    domToFolderMap.set(ul, folderData);
 
-function updateFolderCount(path) {
-    const li = document.querySelector(`li.tree-node[data-path="${CSS.escape(path)}"]`);
-    if (!li) return;
+    // 按名称排序插入节点
+    const existingNodes = Array.from(parentUl.querySelectorAll(':scope > li.tree-node'));
+    let insertBeforeNode = null;
 
-    // 查找或创建计数 span (优先找带 class 的，否则找任意 span)
-    let countSpan = li.querySelector('.tree-node-count') || li.querySelector('span');
+    for (const node of existingNodes) {
+        const nodeData = domToFolderMap.get(node);
+        const nodeName = nodeData ? nodeData.name : node.textContent.trim();
 
-    if (!countSpan) {
-        countSpan = document.createElement('span');
-        countSpan.className = 'tree-node-count';
-        li.appendChild(countSpan);
-    } else {
-        // 确保 class 存在 (兼容旧元素)
-        if (!countSpan.classList.contains('tree-node-count')) {
-            countSpan.classList.add('tree-node-count');
-            countSpan.style.cssText = ''; // 清除之前的内联样式
+        if (folderName.localeCompare(nodeName) < 0) {
+            insertBeforeNode = node;
+            break;
         }
     }
 
-    // 此时无需传入 count，直接从全局数据拿
-    const data = appState.foldersData.get(path);
-    if (data) {
-        if (data.files) {
-            countSpan.textContent = `(${data.files.length})`;
-        }
-        updateFolderIconState(path);
+    if (insertBeforeNode) {
+        parentUl.insertBefore(li, insertBeforeNode);
+        parentUl.insertBefore(ul, insertBeforeNode);
+    } else {
+        parentUl.appendChild(li);
+        parentUl.appendChild(ul);
+    }
+}
+
+function updateFolderCount(path) {
+    const folderData = appState.foldersData.get(path);
+    if (folderData && typeof folderData.updateCount === 'function') {
+        folderData.updateCount();
     }
 }
 
 function updateActiveTreeNode(path) {
+    // 先移除所有激活状态
     document.querySelectorAll('.tree-node').forEach(node => {
         node.classList.remove('active');
-        if (node.dataset.path === path || (path === 'ALL_PHOTOS' && node.id === 'allPhotosNode')) {
-            node.classList.add('active');
-        }
     });
-}
 
-function toggleFolderState(li, ul) {
-    ul.classList.toggle('expanded');
-    const isExpanded = ul.classList.contains('expanded');
-    const icon = li.querySelector('i');
-    if (icon) {
-        icon.classList.remove('fa-folder', 'fa-folder-open');
-        icon.classList.add(isExpanded ? 'fa-folder-open' : 'fa-folder');
+    // 处理特殊的 "所有图片" 节点
+    if (path === 'ALL_PHOTOS') {
+        const allPhotosNode = document.getElementById('allPhotosNode');
+        if (allPhotosNode) allPhotosNode.classList.add('active');
+        return;
+    }
+
+    // 使用 Folder 对象激活
+    const folderData = appState.foldersData.get(path);
+    if (folderData && typeof folderData.setActive === 'function') {
+        folderData.setActive();
     }
 }
 
-function syncTreeStructure(parentPath, newSubHandles) {
-    const parentUl = document.querySelector(`ul[data-parent-path="${CSS.escape(parentPath)}"]`);
-    if (!parentUl) return;
+function toggleFolderState(li, ul) {
+    // 使用 WeakMap 获取 Folder 对象
+    const folderData = domToFolderMap.get(li);
+    if (folderData) {
+        folderData.toggleExpanded();
+    } else {
+        // 降级方案：直接操作 DOM
+        ul.classList.toggle('expanded');
+        const isExpanded = ul.classList.contains('expanded');
+        const icon = li.querySelector('i');
+        if (icon) {
+            icon.classList.remove('fa-folder', 'fa-folder-open');
+            icon.classList.add(isExpanded ? 'fa-folder-open' : 'fa-folder');
+        }
+    }
+}
+
+async function syncTreeStructure(parentPath, newSubHandles) {
+    const parentFolder = appState.foldersData.get(parentPath);
+    if (!parentFolder || !parentFolder.treeList) return;
+
+    const parentUl = parentFolder.treeList;
 
     const existingLis = Array.from(parentUl.querySelectorAll(':scope > li.tree-node'));
     const existingNames = new Set(existingLis.map(li => {
+        // 使用 WeakMap 获取 Folder 对象
+        const folderData = domToFolderMap.get(li);
+        if (folderData) {
+            return folderData.name;
+        }
+        // 降级方案
         const path = li.dataset.path;
         return path.substring(path.lastIndexOf('/') + 1);
     }));
 
     const newNames = new Set(newSubHandles.map(h => h.name));
 
+    // 移除不存在的节点
     existingLis.forEach(li => {
-        const path = li.dataset.path;
-        const name = path.substring(path.lastIndexOf('/') + 1);
-        if (!newNames.has(name)) {
-            const subUl = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
-            if (subUl) subUl.remove();
-            li.remove();
+        const folderData = domToFolderMap.get(li);
+        if (folderData && !newNames.has(folderData.name)) {
+            // 检查是否是 Folder 实例（有 removeDOMNodes 方法）
+            if (typeof folderData.removeDOMNodes === 'function') {
+                folderData.removeDOMNodes();
+            } else {
+                // 降级方案：直接删除 DOM
+                const path = li.dataset.path;
+                const subUl = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
+                if (subUl) subUl.remove();
+                li.remove();
+            }
+        } else if (!folderData) {
+            // 降级方案：从 dataset 获取信息
+            const path = li.dataset.path;
+            const name = path.substring(path.lastIndexOf('/') + 1);
+            if (!newNames.has(name)) {
+                const subUl = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
+                if (subUl) subUl.remove();
+                li.remove();
+            }
         }
     });
 
-    newSubHandles.forEach(handle => {
+    // 添加新节点
+    for (const handle of newSubHandles) {
         if (!existingNames.has(handle.name)) {
             const fullPath = parentPath + '/' + handle.name;
-            if (!appState.foldersData.has(fullPath)) {
-                appState.foldersData.set(fullPath, {
-                    handle: handle,
-                    files: [],
-                    subFolders: [],
-                    doms: [],
-                    loaded: false
-                });
+
+            // 使用 getFolderData 确保创建 Folder 实例
+            let folderData = appState.foldersData.get(fullPath);
+            if (!folderData) {
+                folderData = getFolderData(handle, fullPath);
             }
+
+            // 先扫描文件夹以获取文件计数
+            if (!folderData.scanned) {
+                await scanDirectory(folderData);
+            }
+
             updateTreeWithSubFolder(parentPath, handle.name, fullPath);
         }
-    });
+    }
 }
 
 function removeTreeNode(path) {
-    const li = document.querySelector(`li[data-path="${CSS.escape(path)}"]`);
-    if (li) {
-        const ul = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
-        if (ul) ul.remove();
-        li.remove();
+    const folderData = appState.foldersData.get(path);
+    if (folderData && typeof folderData.removeDOMNodes === 'function') {
+        folderData.removeDOMNodes();
+    } else {
+        // 降级方案：使用 DOM 查询
+        const li = document.querySelector(`li[data-path="${CSS.escape(path)}"]`);
+        if (li) {
+            const ul = document.querySelector(`ul[data-parent-path="${CSS.escape(path)}"]`);
+            if (ul) ul.remove();
+            li.remove();
+        }
     }
 }
 
 function updateFolderIconState(path) {
-    const li = document.querySelector(`li.tree-node[data-path="${CSS.escape(path)}"]`);
-    if (!li) return;
-
-    // 如果是 ALL_PHOTOS 特殊节点，通常不用处理 empty-folder 样式，或者有单独逻辑
+    // 特殊节点不处理
     if (path === 'ALL_PHOTOS') return;
 
-    const data = appState.foldersData.get(path);
-    if (!data) return; // 数据尚未加载
-
-    const isEmpty = (!data.files || data.files.length === 0) &&
-        (!data.subFolders || data.subFolders.length === 0);
-
-    if (isEmpty) {
-        li.classList.add('empty-folder');
-    } else {
-        li.classList.remove('empty-folder');
+    const folderData = appState.foldersData.get(path);
+    if (folderData && typeof folderData.updateIconState === 'function') {
+        folderData.updateIconState();
     }
 }

@@ -19,11 +19,13 @@ const EXIF_GROUPS = {
 
 function showImageProperties() {
     const menu = UI.contextMenu;
-    const idx = parseInt(menu.dataset.displayIndex);
-    if (isNaN(idx)) return;
 
-    const fileData = globals.currentDisplayList[idx];
-    if (!fileData) return;
+    // 直接从菜单获取 fileData（更可靠）
+    const fileData = menu.fileData;
+    if (!fileData) {
+        console.warn("无法获取文件数据");
+        return;
+    }
 
     UI.contextMenu.classList.remove('show');
     const modal = document.getElementById('propertiesModal');

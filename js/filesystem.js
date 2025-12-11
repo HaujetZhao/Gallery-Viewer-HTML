@@ -16,7 +16,9 @@ async function openFolderPicker() {
         appState.dirMap.clear();
         UI.treeRoot.innerHTML = '';
 
-        const rootData = await scanDirectory(handle, handle.name);
+        // 创建根 Folder 对象并扫描
+        const rootData = getFolderData(handle, handle.name);
+        await scanDirectory(rootData);
 
         createRootNode(rootData);
         loadFolder(handle.name);
@@ -31,23 +33,26 @@ async function openFolderPicker() {
 }
 
 // 深度复用：在现有容器上执行增删改查
-async function scanDirectory(dirHandle, path) {
-    // 1. 获取或初始化容器
-    let folderData = getFolderData(dirHandle, path);
+async function scanDirectory(folderData) {
+    if (!folderData || !folderData.handle) {
+        throw new Error('scanDirectory 需要有效的 Folder 对象');
+    }
 
+    const dirHandle = folderData.handle;
     const newFiles = [];
     const newSubFolders = [];
 
     // 建立旧文件索引 (用于复用)
     const oldFileMap = new Map(folderData.files.map(f => [f.name, f]));
 
+    // 扫描文件
     for await (const entry of dirHandle.values()) {
         if (entry.kind !== 'file') continue;
         const ext = entry.name.split('.').pop().toLowerCase();
         if (!imageExtensions.includes(ext)) continue;
         try {
-            const file = await entry.getFile();         // 对文件条目生成 File 对象
-            let fileObj = oldFileMap.get(entry.name);   // 尝试得到旧的 File 对象
+            const file = await entry.getFile();
+            let fileObj = oldFileMap.get(entry.name);
 
             if (fileObj) {
                 // 检查是否发生变化
@@ -55,36 +60,30 @@ async function scanDirectory(dirHandle, path) {
                     // 完全没变：刷新 handle 即可
                     fileObj.handle = entry;
                 } else {
-                    // 变了：修改属性，释放旧资源
-                    if (fileObj.blobUrl) URL.revokeObjectURL(fileObj.blobUrl);
-                    fileObj.file = file;
-                    fileObj.size = file.size;
-                    fileObj.lastModified = file.lastModified;
+                    // 变了：使用 refresh 方法更新
                     fileObj.handle = entry;
-                    fileObj.blobUrl = URL.createObjectURL(file);
-                    fileObj.md5 = null;
+                    await fileObj.refresh();
                 }
                 // 从 oldMap 中移除，标记为已处理
                 oldFileMap.delete(entry.name);
             } else {
-                // 这是新文件，创建新对象
-                fileObj = {
+                // 这是新文件，创建新的 SmartFile 实例
+                fileObj = new SmartFile({
                     handle: entry,
                     file: file,
                     name: entry.name,
-                    path: path + '/' + entry.name,
-                    size: file.size,
-                    lastModified: file.lastModified,
-                    blobUrl: URL.createObjectURL(file), // 新生成
-                    dom: null,
-                    md5: null
-                };
+                    parent: folderData
+                });
+
+                // 保持兼容性：添加额外属性
+                fileObj.path = folderData.getPath() + '/' + entry.name;
             }
             newFiles.push(fileObj);
 
         } catch (e) { console.warn("无法读取文件:", entry.name, e); }
     }
 
+    // 扫描子文件夹
     for await (const entry of dirHandle.values()) {
         if (entry.kind !== 'directory') continue;
         if (entry.name.startsWith('.')) continue;
@@ -93,7 +92,7 @@ async function scanDirectory(dirHandle, path) {
 
     // 处理被删除的文件（剩余在 oldFileMap 中的）
     for (const [name, deletedFile] of oldFileMap) {
-        if (deletedFile.blobUrl) URL.revokeObjectURL(deletedFile.blobUrl);
+        deletedFile.dispose();
     }
 
     // 排序
@@ -115,13 +114,27 @@ function getFolderData(dirHandle, path) {
         folderData.handle = dirHandle;
         appState.dirMap.set(path, dirHandle);
     } else {
-        folderData = {
-            handle: dirHandle, // 这一步可能更新 handle
-            files: [],
-            subFolders: [],
-            doms: [],
-            scanned: false
-        };
+        // 解析路径获取文件夹名称和父级
+        const pathParts = path.split('/');
+        const name = pathParts[pathParts.length - 1];
+
+        // 获取父级 Folder 对象
+        let parent = null;
+        if (pathParts.length > 1) {
+            const parentPath = pathParts.slice(0, -1).join('/');
+            parent = appState.foldersData.get(parentPath) || null;
+        }
+
+        // 创建新的 Folder 实例
+        folderData = new Folder({
+            handle: dirHandle,
+            name: name,
+            parent: parent
+        });
+
+        // 保持兼容性：添加 doms 属性
+        folderData.doms = [];
+
         // 放入状态管理 (如果是新创建的)
         appState.foldersData.set(path, folderData);
         appState.dirMap.set(path, dirHandle);
@@ -135,8 +148,10 @@ async function startBackgroundScan(parentHandle, parentPath) {
 
     for (const subHandle of currentData.subFolders) {
         const subPath = parentPath + '/' + subHandle.name;
-        // scanDirectory 会自动处理状态更新和复用
-        await scanDirectory(subHandle, subPath);
+
+        // 获取或创建 Folder 对象再扫描
+        const subFolderData = getFolderData(subHandle, subPath);
+        await scanDirectory(subFolderData);
 
         updateTreeWithSubFolder(parentPath, subHandle.name, subPath);
         // Yield to UI
@@ -145,11 +160,40 @@ async function startBackgroundScan(parentHandle, parentPath) {
     }
 }
 
-async function handleFolderClick(path, li) { // Removed ul param
+async function handleFolderClick(path, li) {
     if (!path || !li) return;
-    loadFolder(path);
-    // toggleFolderState(li, ul); // Moved to sidebar delegation logic
-    await refreshFolder(path, true);
+
+    // 获取 Folder 对象
+    const folderData = domToFolderMap.get(li) || appState.foldersData.get(path);
+    if (!folderData) {
+        showToast("无法找到文件夹数据", "error");
+        return;
+    }
+
+    try {
+        // 先验证文件夹是否可用
+        const isValid = await folderData.validate();
+
+        if (!isValid) {
+            // 文件夹失效，执行恢复
+            await handleFolderNotFound(folderData);
+            return;
+        }
+
+        // 文件夹有效，正常加载
+        loadFolder(path);
+        await refreshFolder(path, true);
+
+    } catch (err) {
+        console.error("文件夹点击处理失败:", err);
+
+        // 如果是 NotFoundError，尝试恢复
+        if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
+            await handleFolderNotFound(folderData);
+        } else {
+            showToast("加载文件夹失败: " + err.message, "error");
+        }
+    }
 }
 
 function loadFolder(path) {
@@ -221,24 +265,25 @@ async function refreshFolder(folderPath, silent = false) {
     if (isCurrent && !silent) showToast("正在刷新...", "info");
 
     try {
-        let folderData = appState.foldersData.get(folderPath); // 获取现有引用
-        let handle = folderData ? folderData.handle : null;
+        let folderData = appState.foldersData.get(folderPath);
 
-        if (!handle) {
+        if (!folderData || !folderData.handle) {
             // 尝试从 rootHandle 恢复（如果是根目录）
-            if (folderPath === appState.rootHandle.name) handle = appState.rootHandle;
-            else throw new Error("目录句柄丢失");
+            if (folderPath === appState.rootHandle.name) {
+                folderData = getFolderData(appState.rootHandle, folderPath);
+            } else {
+                throw new Error("目录句柄丢失");
+            }
         }
 
         // 深度复用扫描：直接原地更新 folderData
-        await scanDirectory(handle, folderPath);
+        await scanDirectory(folderData);
 
         // 更新 UI
         updateFolderCount(folderPath);
 
         // 重新同步子树结构（如果子文件夹有变）
-        // 注意：refreshFolder 里调用 scanDirectory 后，folderData.subFolders 已经是新的/更新过的列表
-        syncTreeStructure(folderPath, appState.foldersData.get(folderPath).subFolders);
+        await syncTreeStructure(folderPath, folderData.subFolders);
 
         if (isCurrent) {
             loadFolder(folderPath);
@@ -274,7 +319,9 @@ async function reloadProject() {
         appState.foldersData.clear();
         appState.dirMap.clear();
 
-        const rootData = await scanDirectory(handle, handle.name);
+        // 创建根 Folder 对象并扫描
+        const rootData = getFolderData(handle, handle.name);
+        await scanDirectory(rootData);
 
         createRootNode(rootData);
         loadFolder(handle.name);
@@ -299,13 +346,12 @@ async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
         const sourceFile = sourceCache.files.find(f => f.name === data.name);
         if (!sourceFile) throw new Error("源文件丢失");
 
-        const newFileHandle = await targetDirHandle.getFileHandle(data.name, { create: true });
-        const srcFile = await sourceFile.handle.getFile();
-        const writable = await newFileHandle.createWritable();
-        await writable.write(srcFile);
-        await writable.close();
+        // 获取目标文件夹对象
+        const targetFolder = appState.foldersData.get(targetPath);
+        if (!targetFolder) throw new Error("目标文件夹未找到");
 
-        await sourceCache.handle.removeEntry(data.name);
+        // 使用 SmartFile 的 move 方法
+        await sourceFile.move(targetFolder);
 
         showToast(`已移动: ${data.name}`, "success");
 
@@ -351,8 +397,9 @@ async function forceRegenerateCurrentThumbnails() {
 }
 
 async function moveFileToTrash(fileData) {
-    // 计算文件相对于根目录的路径
-    const pathParts = fileData.path.split('/');
+    // 使用 getPath() 方法获取文件的完整路径
+    const fullPath = fileData.getPath();
+    const pathParts = fullPath.split('/');
     const rootName = appState.rootHandle.name;
 
     // 移除根目录名称，得到相对路径
@@ -363,12 +410,11 @@ async function moveFileToTrash(fileData) {
     const fileName = pathParts.pop(); // 文件名
     const relativeDirPath = pathParts.join('/'); // 相对目录路径
 
-    // 获取父文件夹缓存（用于删除原文件）
-    const fullParentPath = fileData.path.split('/').slice(0, -1).join('/');
-    const parentCache = appState.foldersData.get(fullParentPath);
-    if (!parentCache?.handle) {
+    // 使用 parent 属性获取父文件夹
+    if (!fileData.parent || !fileData.parent.handle) {
         throw new Error("无法定位父文件夹句柄");
     }
+    const parentCache = fileData.parent;
 
     // 1. 在根目录创建 .trash 文件夹
     const rootTrashHandle = await appState.rootHandle.getDirectoryHandle('.trash', { create: true });
@@ -403,18 +449,15 @@ async function moveFileToTrash(fileData) {
     // 4. 移动文件到 .trash 中的对应目录
     await fileData.handle.move(currentDirHandle, targetName);
 
-    // 5. 更新内存数据
-    if (parentCache.files) {
-        const i = parentCache.files.indexOf(fileData);
-        if (i > -1) parentCache.files.splice(i, 1);
-    }
+    // 5. 更新内存数据 - 使用 Folder 的 removeFile 方法
+    parentCache.removeFile(fileData);
 
     const listIdx = globals.currentDisplayList.indexOf(fileData);
     if (listIdx > -1) globals.currentDisplayList.splice(listIdx, 1);
 
     // 6. 返回删除信息用于撤销
     return {
-        parentPath: fullParentPath,
+        parentPath: parentCache.getPath(),
         originalName: fileName,
         trashName: targetName,
         trashDirHandle: currentDirHandle,

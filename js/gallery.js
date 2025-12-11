@@ -47,6 +47,9 @@ function renderGallery(fileList) {
     const approxCardWidth = (window.innerWidth - 300) / colCount;
     wrapper.style.setProperty('--estimated-height', `${approxCardWidth + 60}px`);
 
+    // 更新全局可见列表，用于 Modal 导航
+    globals.visibleFileList = displayFiles;
+
     displayFiles.forEach((fileData, index) => {
         if (!fileData.dom) {
             fileData.dom = createPhotoCard(fileData);
