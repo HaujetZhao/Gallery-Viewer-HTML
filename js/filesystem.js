@@ -40,7 +40,7 @@ async function scanDirectory(dirHandle, path) {
 
     // 建立旧文件索引 (用于复用)
     const oldFileMap = new Map(folderData.files.map(f => [f.name, f]));
-    
+
     for await (const entry of dirHandle.values()) {
         if (entry.kind !== 'file') continue;
         const ext = entry.name.split('.').pop().toLowerCase();
@@ -87,6 +87,7 @@ async function scanDirectory(dirHandle, path) {
 
     for await (const entry of dirHandle.values()) {
         if (entry.kind !== 'directory') continue;
+        if (entry.name.startsWith('.')) continue;
         newSubFolders.push(entry);
     }
 
@@ -347,4 +348,51 @@ async function forceRegenerateCurrentThumbnails() {
     console.log(`已清除当前视图的 ${deleteCount} 个缩略图缓存`);
     showToast("缓存已清除，正在重新生成...", "success");
     redrawAllThumbnails(true); // 使用全局
+}
+
+async function moveFileToTrash(fileData) {
+    // 计算父路径并获取缓存
+    const pathParts = fileData.path.split('/');
+    pathParts.pop();
+    const parentPath = pathParts.join('/');
+
+    const parentCache = appState.foldersData.get(parentPath);
+    if (!parentCache?.handle) {
+        throw new Error("无法定位父文件夹句柄");
+    }
+
+    // 1. 获取或创建 .trash 文件夹
+    const trashHandle = await parentCache.handle.getDirectoryHandle('.trash', { create: true });
+
+    // 2. 计算目标文件名（防重名）
+    const dotIdx = fileData.name.lastIndexOf('.');
+    const baseName = dotIdx !== -1 ? fileData.name.substring(0, dotIdx) : fileData.name;
+    const ext = dotIdx !== -1 ? fileData.name.substring(dotIdx) : '';
+
+    let targetName = fileData.name;
+    let counter = 1;
+    while (true) {
+        try {
+            await trashHandle.getFileHandle(targetName);
+            targetName = `${baseName}_${counter}${ext}`;
+            counter++;
+        } catch (e) {
+            if (e.name === 'NotFoundError') break;
+            throw e;
+        }
+    }
+
+    // 3. 移动文件
+    await fileData.handle.move(trashHandle, targetName);
+
+    // 4. 更新内存数据
+    if (parentCache.files) {
+        const i = parentCache.files.indexOf(fileData);
+        if (i > -1) parentCache.files.splice(i, 1);
+    }
+
+    const listIdx = globals.currentDisplayList.indexOf(fileData);
+    if (listIdx > -1) globals.currentDisplayList.splice(listIdx, 1);
+
+    return parentPath;
 }

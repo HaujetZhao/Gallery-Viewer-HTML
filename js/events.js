@@ -261,38 +261,15 @@ async function handleDelete() {
     const idx = parseInt(UI.contextMenu.dataset.displayIndex);
     const fileData = globals.currentDisplayList[idx];
     if (!fileData) return;
-    if (!confirm(`确定要删除 "${fileData.name}" 吗？`)) return;
+    if (!confirm(`确定要将 "${fileData.name}" 放入回收站吗？`)) return;
 
     try {
-        // 计算父路径并获取缓存
-        const pathParts = fileData.path.split('/');
-        pathParts.pop();
-        const parentPath = pathParts.join('/');
-        const parentCache = appState.foldersData.get(
-            appState.allPhotosMode ? parentPath : appState.currentPath
-        );
-
-        if (!parentCache?.handle) throw new Error("无法定位父文件夹");
-
-        // 删除文件
-        await parentCache.handle.removeEntry(fileData.name);
+        const parentPath = await moveFileToTrash(fileData);
         fileData.dom.remove();
-
-        // 更新缓存中的文件列表
-        if (parentCache.files) {
-            const i = parentCache.files.indexOf(fileData);
-            if (i > -1) parentCache.files.splice(i, 1);
-        }
-
-        // 更新当前显示列表
-        const listIdx = globals.currentDisplayList.indexOf(fileData);
-        if (listIdx > -1) globals.currentDisplayList.splice(listIdx, 1);
-
-        // 更新文件夹计数
         updateFolderCount(parentPath);
-
-        showToast("文件已删除");
+        showToast("已移动到 .trash 回收站");
     } catch (e) {
-        showToast("删除失败: " + e.message, "error");
+        console.error(e);
+        showToast("操作失败: " + e.message, "error");
     }
 }
