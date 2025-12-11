@@ -351,29 +351,47 @@ async function forceRegenerateCurrentThumbnails() {
 }
 
 async function moveFileToTrash(fileData) {
-    // 计算父路径并获取缓存
+    // 计算文件相对于根目录的路径
     const pathParts = fileData.path.split('/');
-    pathParts.pop();
-    const parentPath = pathParts.join('/');
+    const rootName = appState.rootHandle.name;
 
-    const parentCache = appState.foldersData.get(parentPath);
+    // 移除根目录名称，得到相对路径
+    if (pathParts[0] === rootName) {
+        pathParts.shift();
+    }
+
+    const fileName = pathParts.pop(); // 文件名
+    const relativeDirPath = pathParts.join('/'); // 相对目录路径
+
+    // 获取父文件夹缓存（用于删除原文件）
+    const fullParentPath = fileData.path.split('/').slice(0, -1).join('/');
+    const parentCache = appState.foldersData.get(fullParentPath);
     if (!parentCache?.handle) {
         throw new Error("无法定位父文件夹句柄");
     }
 
-    // 1. 获取或创建 .trash 文件夹
-    const trashHandle = await parentCache.handle.getDirectoryHandle('.trash', { create: true });
+    // 1. 在根目录创建 .trash 文件夹
+    const rootTrashHandle = await appState.rootHandle.getDirectoryHandle('.trash', { create: true });
 
-    // 2. 计算目标文件名（防重名）
-    const dotIdx = fileData.name.lastIndexOf('.');
-    const baseName = dotIdx !== -1 ? fileData.name.substring(0, dotIdx) : fileData.name;
-    const ext = dotIdx !== -1 ? fileData.name.substring(dotIdx) : '';
+    // 2. 在 .trash 中递归创建相同的目录结构
+    let currentDirHandle = rootTrashHandle;
+    if (relativeDirPath) {
+        const dirs = relativeDirPath.split('/');
+        for (const dir of dirs) {
+            currentDirHandle = await currentDirHandle.getDirectoryHandle(dir, { create: true });
+        }
+    }
 
-    let targetName = fileData.name;
+    // 3. 计算目标文件名（防重名）
+    const dotIdx = fileName.lastIndexOf('.');
+    const baseName = dotIdx !== -1 ? fileName.substring(0, dotIdx) : fileName;
+    const ext = dotIdx !== -1 ? fileName.substring(dotIdx) : '';
+
+    let targetName = fileName;
     let counter = 1;
     while (true) {
         try {
-            await trashHandle.getFileHandle(targetName);
+            await currentDirHandle.getFileHandle(targetName);
             targetName = `${baseName}_${counter}${ext}`;
             counter++;
         } catch (e) {
@@ -382,10 +400,10 @@ async function moveFileToTrash(fileData) {
         }
     }
 
-    // 3. 移动文件
-    await fileData.handle.move(trashHandle, targetName);
+    // 4. 移动文件到 .trash 中的对应目录
+    await fileData.handle.move(currentDirHandle, targetName);
 
-    // 4. 更新内存数据
+    // 5. 更新内存数据
     if (parentCache.files) {
         const i = parentCache.files.indexOf(fileData);
         if (i > -1) parentCache.files.splice(i, 1);
@@ -394,21 +412,22 @@ async function moveFileToTrash(fileData) {
     const listIdx = globals.currentDisplayList.indexOf(fileData);
     if (listIdx > -1) globals.currentDisplayList.splice(listIdx, 1);
 
-    // 5. 返回删除信息用于撤销
+    // 6. 返回删除信息用于撤销
     return {
-        parentPath,
-        originalName: fileData.name,
+        parentPath: fullParentPath,
+        originalName: fileName,
         trashName: targetName,
-        trashHandle,
-        parentHandle: parentCache.handle
+        trashDirHandle: currentDirHandle,
+        parentHandle: parentCache.handle,
+        relativeDirPath // 保存相对路径用于恢复
     };
 }
 
 async function restoreFromTrash(deleteInfo) {
-    const { parentPath, originalName, trashName, trashHandle, parentHandle } = deleteInfo;
+    const { parentPath, originalName, trashName, trashDirHandle, parentHandle } = deleteInfo;
 
     // 1. 获取回收站中的文件句柄
-    const fileHandle = await trashHandle.getFileHandle(trashName);
+    const fileHandle = await trashDirHandle.getFileHandle(trashName);
 
     // 2. 移动回原位置
     await fileHandle.move(parentHandle, originalName);
