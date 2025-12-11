@@ -275,6 +275,9 @@ async function handleDelete() {
         // 保存删除信息到历史记录
         appState.deleteHistory.push(deleteInfo);
 
+        // 刷新文件夹
+        refreshFolder(appState.currentPath, silent=true);
+
         showToast("已移动到 .trash 回收站");
     } catch (e) {
         console.error(e);
