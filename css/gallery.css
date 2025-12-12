@@ -118,7 +118,7 @@
 /* 媒体类型标识 */
 .media-badge {
     position: absolute;
-    top: 8px;
+    top: calc(8px);
     right: 8px;
     padding: 4px 8px;
     border-radius: 4px;
@@ -131,6 +131,13 @@
     z-index: 3;
     backdrop-filter: blur(4px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease;
+    /* transform: translateY(-100%); */
+}
+
+.photo-card:hover .media-badge,
+.photo-card.renaming .media-badge {
+    transform: translateY(100%);
 }
 
 .badge-gif {

@@ -1,13 +1,8 @@
 
-// 支持的媒体文件扩展名
-const imageExtensions = [
-    // 图片
-    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg',
-    // 视频
-    'mp4', 'webm', 'ogg', 'mov',
-    // 音频
-    'mp3', 'wav', 'ogg', 'flac', 'm4a'
-];
+
+// 支持的媒体文件扩展名 - 使用统一配置
+const imageExtensions = FileTypes.allMedia;
+
 
 async function openFolderPicker() {
     try {

@@ -32,57 +32,62 @@ function showImageProperties() {
     if (!modal) return;
 
     const bodyContent = document.getElementById('propsBodyContent');
-    bodyContent.innerHTML = '<div class="loader">正在分析图片信息...</div>';
+    bodyContent.innerHTML = '<div class="loader">正在分析文件信息...</div>';
 
     modal.classList.remove('hidden');
 
-    // 预加载图片获取尺寸 (如果没读过)
-    const imgLoader = new Promise(resolve => {
-        const img = new Image();
-        img.src = fileData.blobUrl;
-        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-        img.onerror = () => resolve({ w: 0, h: 0 });
-    });
+    // 获取文件类型对应的元数据策略
+    const fileExt = fileData.name.split('.').pop().toLowerCase();
+    const strategy = getMetadataStrategy(fileExt);
 
     (async () => {
-        const dim = await imgLoader;
-        let exifTags = null;
+        let metadata = null;
 
-        // 读取 EXIF
         try {
-            let fileObj = null;
-            if (fileData.handle) fileObj = await fileData.handle.getFile();
-            else fileObj = fileData.file;
-
-            if (window.extractExif) {
-                exifTags = await window.extractExif(fileObj);
-            }
+            metadata = await strategy.getMetadata(fileData);
         } catch (e) {
-            console.error("读取EXIF失败", e);
+            console.error("获取元数据失败", e);
         }
 
-        renderProperties(fileData, dim, exifTags);
+        renderProperties(fileData, metadata, fileExt);
     })();
 }
 
-function renderProperties(fileData, dim, tags) {
+function renderProperties(fileData, metadata, fileExt) {
     const container = document.getElementById('propsBodyContent');
     container.innerHTML = '';
+
+    const dim = metadata?.dimensions || {};
+    const exifTags = metadata?.exif;
 
     // 1. 基本信息 (始终显示)
     const basicSection = document.createElement('div');
     basicSection.className = 'props-section';
+
+    let dimensionText = '';
+    if (dim.width && dim.height) {
+        dimensionText = `${dim.width} x ${dim.height}`;
+    } else if (dim.width === 0) {
+        dimensionText = '未知';
+    }
+
+    let durationRow = '';
+    if (dim.duration !== undefined) {
+        durationRow = `<tr><td><i class="fas fa-play-circle"></i> 时长</td><td>${formatDuration(dim.duration)}</td></tr>`;
+    }
+
     basicSection.innerHTML = `
         <h4>基本信息</h4>
         <table class="props-table">
             <tr>
-                <td>文件名</td>
+                <td><i class="fas fa-file"></i> 文件名</td>
                 <td class="editable-filename" style="cursor: pointer; color: #3498db;" title="点击编辑">${fileData.name}</td>
             </tr>
-            <tr><td>路径</td><td style="word-break: break-all;">${fileData.path || fileData.webkitRelativePath || fileData.name}</td></tr>
-            <tr><td>分辨率</td><td>${dim.w > 0 ? `${dim.w} x ${dim.h}` : '未知'}</td></tr>
-            <tr><td>大小</td><td>${formatBytes(fileData.size)}</td></tr>
-            <tr><td>修改时间</td><td>${new Date(fileData.lastModified).toLocaleString()}</td></tr>
+            <tr><td><i class="fas fa-folder-open"></i> 路径</td><td style="word-break: break-all;">${fileData.path || fileData.webkitRelativePath || fileData.name}</td></tr>
+            ${dimensionText ? `<tr><td><i class="fas fa-expand"></i> 分辨率</td><td>${dimensionText}</td></tr>` : ''}
+            ${durationRow}
+            <tr><td><i class="fas fa-database"></i> 大小</td><td>${formatBytes(fileData.size)}</td></tr>
+            <tr><td><i class="fas fa-clock"></i> 修改时间</td><td>${new Date(fileData.lastModified).toLocaleString()}</td></tr>
         </table>
     `;
     container.appendChild(basicSection);
@@ -93,14 +98,86 @@ function renderProperties(fileData, dim, tags) {
         enablePropertiesRename(filenameCell, fileData);
     });
 
-    // 计算 GPS
+    // 2. 视频/音频技术信息 (如果有)
+    if (dim.estimatedBitrate || dim.videoTrack || dim.audioTrack) {
+        const techSection = document.createElement('div');
+        techSection.className = 'props-section';
+        let techRows = '';
+
+        if (dim.estimatedBitrate) {
+            techRows += `<tr><td><i class="fas fa-tachometer-alt"></i> 估算比特率</td><td>${dim.estimatedBitrate} kbps</td></tr>`;
+        }
+
+        if (dim.videoTrack) {
+            if (dim.videoTrack.label) {
+                techRows += `<tr><td><i class="fas fa-video"></i> 视频轨道</td><td>${dim.videoTrack.label}</td></tr>`;
+            }
+        }
+
+        if (dim.audioTrack) {
+            if (dim.audioTrack.label) {
+                techRows += `<tr><td><i class="fas fa-volume-up"></i> 音频轨道</td><td>${dim.audioTrack.label}</td></tr>`;
+            }
+        }
+
+        if (techRows) {
+            techSection.innerHTML = `
+                <h4>技术信息</h4>
+                <table class="props-table">
+                    ${techRows}
+                </table>
+            `;
+            container.appendChild(techSection);
+        }
+    }
+
+    // 2.5 ID3 标签信息 (音频文件)
+    if (metadata?.id3) {
+        const id3Section = document.createElement('div');
+        id3Section.className = 'props-section';
+
+        const id3Tags = metadata.id3;
+        let id3Rows = '';
+
+        // 按优先级显示 ID3 信息
+        const id3Fields = [
+            { key: 'title', label: '标题', icon: 'fa-music' },
+            { key: 'artist', label: '艺术家', icon: 'fa-user' },
+            { key: 'album', label: '专辑', icon: 'fa-compact-disc' },
+            { key: 'albumArtist', label: '专辑艺术家', icon: 'fa-users' },
+            { key: 'year', label: '年份', icon: 'fa-calendar' },
+            { key: 'genre', label: '流派', icon: 'fa-guitar' },
+            { key: 'track', label: '音轨', icon: 'fa-list-ol' },
+            { key: 'disc', label: '碟片', icon: 'fa-record-vinyl' },
+            { key: 'composer', label: '作曲家', icon: 'fa-pen-fancy' },
+            { key: 'comment', label: '注释', icon: 'fa-comment' }
+        ];
+
+        id3Fields.forEach(field => {
+            if (id3Tags[field.key]) {
+                id3Rows += `<tr><td><i class="fas ${field.icon}"></i> ${field.label}</td><td>${id3Tags[field.key]}</td></tr>`;
+            }
+        });
+
+        if (id3Rows) {
+            id3Section.innerHTML = `
+                <h4><i class="fas fa-tags"></i> 音乐信息</h4>
+                <table class="props-table">
+                    ${id3Rows}
+                </table>
+            `;
+            container.appendChild(id3Section);
+        }
+    }
+
+    // 计算 GPS (仅图片)
     let gpsHTML = null;
     let latDec = NaN, lonDec = NaN;
-    if (tags && tags.GPSLatitude && tags.GPSLongitude) {
-        const lat = tags.GPSLatitude;
-        const lon = tags.GPSLongitude;
-        const latRef = tags.GPSLatitudeRef || "N";
-        const lonRef = tags.GPSLongitudeRef || "E";
+    if (exifTags && exifTags.GPSLatitude && exifTags.GPSLongitude) {
+        const lat = exifTags.GPSLatitude;
+        const lon = exifTags.GPSLongitude;
+        const latRef = exifTags.GPSLatitudeRef || "N";
+        const lonRef = exifTags.GPSLongitudeRef || "E";
         latDec = convertDMSToDD(lat, latRef);
         lonDec = convertDMSToDD(lon, lonRef);
 
@@ -136,14 +213,14 @@ function renderProperties(fileData, dim, tags) {
         container.appendChild(mapSection);
     }
 
-    // 3. EXIF 信息 (如果有)
-    if (tags && Object.keys(tags).length > 0) {
+    // 3. EXIF 信息 (仅图片,如果有)
+    if (exifTags && Object.keys(exifTags).length > 0) {
         const exifSection = document.createElement('div');
         exifSection.className = 'props-section';
         exifSection.innerHTML = `<h4>EXIF 信息</h4>`;
 
         const gridContainer = document.createElement('div');
-        gridContainer.id = 'propExifContent'; // Keep ID for potential future use or styling
+        gridContainer.id = 'propExifContent';
 
         // 分组渲染
         const groupsFragment = document.createDocumentFragment();
@@ -154,17 +231,17 @@ function renderProperties(fileData, dim, tags) {
         for (const [groupName, keys] of Object.entries(EXIF_GROUPS)) {
             let groupItems = [];
             keys.forEach(key => {
-                if (tags[key] !== undefined) {
+                if (exifTags[key] !== undefined) {
                     usedKeys.add(key);
-                    let val = tags[key];
+                    let val = exifTags[key];
 
                     // 格式化处理
                     if (key === 'ExposureTime' && val < 1 && val > 0) val = `1/${Math.round(1 / val)}`;
                     if (key === 'FocalLength' || key === 'FocalLengthIn35mmFilm') val += ' mm';
 
                     // GPS 特殊格式化
-                    if (key === 'GPSLatitude') val = FormatDMS(val) + (tags.GPSLatitudeRef ? ' ' + tags.GPSLatitudeRef : '');
-                    if (key === 'GPSLongitude') val = FormatDMS(val) + (tags.GPSLongitudeRef ? ' ' + tags.GPSLongitudeRef : '');
+                    if (key === 'GPSLatitude') val = FormatDMS(val) + (exifTags.GPSLatitudeRef ? ' ' + exifTags.GPSLatitudeRef : '');
+                    if (key === 'GPSLongitude') val = FormatDMS(val) + (exifTags.GPSLongitudeRef ? ' ' + exifTags.GPSLongitudeRef : '');
                     if (key === 'GPSAltitude') val = val + ' m';
 
                     groupItems.push({ k: EXIF_MAP[key] || key, v: val });
@@ -191,9 +268,9 @@ function renderProperties(fileData, dim, tags) {
 
         // 其他 EXIF
         const otherItems = [];
-        for (let key in tags) {
+        for (let key in exifTags) {
             if (usedKeys.has(key) || ignoreKeys.includes(key)) continue;
-            const val = tags[key];
+            const val = exifTags[key];
             if (typeof val === 'object' || typeof val === 'function') continue;
             otherItems.push({ k: EXIF_MAP[key] || key, v: val });
         }

@@ -7,7 +7,7 @@
 const ThumbnailStrategies = {
     // 图片策略
     image: {
-        types: ['jpg', 'jpeg', 'png', 'webp', 'bmp'],
+        types: FileTypes.image.standard,
 
         // 创建缩略图元素
         createThumbnailElement: () => {
@@ -47,7 +47,7 @@ const ThumbnailStrategies = {
 
     // GIF 策略
     gif: {
-        types: ['gif'],
+        types: FileTypes.image.gif,
 
         createThumbnailElement: () => {
             const img = document.createElement('img');
@@ -60,16 +60,12 @@ const ThumbnailStrategies = {
             return null; // GIF 不需要缓存
         },
 
-        getCardBadge: () => ({
-            icon: 'fa-film',
-            text: 'GIF',
-            className: 'badge-gif'
-        })
+        getCardBadge: () => null
     },
 
     // SVG 策略
     svg: {
-        types: ['svg'],
+        types: FileTypes.image.svg,
 
         createThumbnailElement: () => {
             const object = document.createElement('object');
@@ -89,16 +85,12 @@ const ThumbnailStrategies = {
             });
         },
 
-        getCardBadge: () => ({
-            icon: 'fa-vector-square',
-            text: 'SVG',
-            className: 'badge-svg'
-        })
+        getCardBadge: () => null
     },
 
     // 视频策略
     video: {
-        types: ['mp4', 'webm', 'ogg', 'mov'],
+        types: FileTypes.video.all,
 
         createThumbnailElement: () => {
             const canvas = document.createElement('canvas');
@@ -106,8 +98,37 @@ const ThumbnailStrategies = {
             return canvas;
         },
 
+        // 绘制视频帧到canvas
+        drawVideoFrame: (canvas, video, targetSize) => {
+            canvas.width = targetSize;
+            canvas.height = targetSize;
+            const ctx = canvas.getContext('2d');
+            const ratio = Math.max(targetSize / video.videoWidth, targetSize / video.videoHeight);
+            const centerShift_x = (targetSize - video.videoWidth * ratio) / 2;
+            const centerShift_y = (targetSize - video.videoHeight * ratio) / 2;
+            ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight,
+                centerShift_x, centerShift_y, video.videoWidth * ratio, video.videoHeight * ratio);
+        },
+
+        // 绘制默认缩略图(带播放图标)
+        drawDefaultThumbnail: (canvas, targetSize) => {
+            canvas.width = targetSize;
+            canvas.height = targetSize;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, targetSize, targetSize);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, targetSize, targetSize);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = `${targetSize * 0.4}px "Font Awesome 6 Free"`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('▶', targetSize / 2, targetSize / 2);
+        },
+
         generateThumbnail: async (element, fileData, targetSize) => {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 const video = document.createElement('video');
                 video.preload = 'metadata';
                 video.muted = true;
@@ -116,7 +137,6 @@ const ThumbnailStrategies = {
                 let captured = false;
                 let timeoutId = null;
 
-                // 清理函数
                 const cleanup = () => {
                     if (timeoutId) clearTimeout(timeoutId);
                     video.removeEventListener('loadedmetadata', onLoadedMetadata);
@@ -125,91 +145,40 @@ const ThumbnailStrategies = {
                     video.src = '';
                 };
 
-                // 生成默认缩略图(带播放图标)
-                const generateDefaultThumbnail = () => {
-                    const canvas = element;
-                    canvas.width = targetSize;
-                    canvas.height = targetSize;
-                    const ctx = canvas.getContext('2d');
-
-                    // 绘制渐变背景
-                    const gradient = ctx.createLinearGradient(0, 0, targetSize, targetSize);
-                    gradient.addColorStop(0, '#667eea');
-                    gradient.addColorStop(1, '#764ba2');
-                    ctx.fillStyle = gradient;
-                    ctx.fillRect(0, 0, targetSize, targetSize);
-
-                    // 绘制播放图标
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                    ctx.font = `${targetSize * 0.4}px "Font Awesome 6 Free"`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('▶', targetSize / 2, targetSize / 2);
-
-                    canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.85);
+                const finishWithDefault = () => {
+                    cleanup();
+                    ThumbnailStrategies.video.drawDefaultThumbnail(element, targetSize);
+                    element.toBlob(blob => resolve(blob), 'image/jpeg', 0.85);
                 };
 
-                const onLoadedMetadata = () => {
-                    // 设置到第1秒或视频中间位置
-                    video.currentTime = Math.min(1, video.duration / 2);
+                const onLoadedMetadata = () => {    // 载入后跳转
+                    video.currentTime = 0.1;
                 };
 
-                const onSeeked = () => {
+                const onSeeked = () => {            // 跳转后绘制
                     if (captured) return;
                     captured = true;
-
                     try {
-                        const canvas = element;
-                        canvas.width = targetSize;
-                        canvas.height = targetSize;
-                        const ctx = canvas.getContext('2d');
-
-                        const ratio = Math.max(targetSize / video.videoWidth, targetSize / video.videoHeight);
-                        const centerShift_x = (targetSize - video.videoWidth * ratio) / 2;
-                        const centerShift_y = (targetSize - video.videoHeight * ratio) / 2;
-
-                        ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight,
-                            centerShift_x, centerShift_y, video.videoWidth * ratio, video.videoHeight * ratio);
-
-                        canvas.toBlob(blob => {
+                        ThumbnailStrategies.video.drawVideoFrame(element, video, targetSize);
+                        element.toBlob(blob => {
                             cleanup();
                             resolve(blob);
                         }, 'image/jpeg', 0.85);
                     } catch (err) {
-                        console.error('视频帧捕获失败:', err);
-                        cleanup();
-                        generateDefaultThumbnail();
+                        finishWithDefault();
                     }
                 };
 
-                const onError = (e) => {
-                    const errorDetails = {
-                        fileName: fileData.name,
-                        blobUrl: fileData.blobUrl,
-                        error: e.target?.error || e,
-                        errorCode: e.target?.error?.code,
-                        errorMessage: e.target?.error?.message
-                    };
-                    console.error('视频缩略图生成失败:', errorDetails);
-                    cleanup();
-                    // 不拒绝,而是生成默认缩略图
-                    generateDefaultThumbnail();
-                };
+                const onError = () => finishWithDefault();
 
                 video.addEventListener('loadedmetadata', onLoadedMetadata);
                 video.addEventListener('seeked', onSeeked);
                 video.addEventListener('error', onError);
 
-                // 设置10秒超时
                 timeoutId = setTimeout(() => {
-                    if (!captured) {
-                        console.warn(`视频缩略图生成超时: ${fileData.name}`);
-                        cleanup();
-                        generateDefaultThumbnail();
-                    }
+                    if (!captured) finishWithDefault();
                 }, 10000);
 
-                // 设置 src 触发加载
                 video.src = fileData.blobUrl;
             });
         },
@@ -223,7 +192,7 @@ const ThumbnailStrategies = {
 
     // 音频策略
     audio: {
-        types: ['mp3', 'wav', 'ogg', 'flac', 'm4a'],
+        types: FileTypes.audio.all,
 
         createThumbnailElement: () => {
             const canvas = document.createElement('canvas');

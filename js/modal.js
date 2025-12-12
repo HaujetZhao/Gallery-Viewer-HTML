@@ -5,7 +5,7 @@
 const MediaStrategies = {
     // 图片策略
     image: {
-        types: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+        types: [...FileTypes.image.standard, ...FileTypes.image.gif],
         createDOM: () => {
             const img = document.createElement('img');
             img.className = 'modal-media modal-image';
@@ -28,7 +28,7 @@ const MediaStrategies = {
 
     // SVG 策略
     svg: {
-        types: ['svg'],
+        types: FileTypes.image.svg,
         createDOM: () => {
             const container = document.createElement('div');
             container.className = 'modal-media svg-container';
@@ -43,7 +43,7 @@ const MediaStrategies = {
 
     // 视频策略
     video: {
-        types: ['mp4', 'webm', 'mov'],
+        types: FileTypes.video.all,
         createDOM: () => {
             const video = document.createElement('video');
             video.className = 'modal-media modal-video';
@@ -60,17 +60,15 @@ const MediaStrategies = {
 
     // 音频策略
     audio: {
-        types: ['mp3', 'wav', 'ogg', 'flac', 'm4a'],
-        createDOM: () => {
-            const audio = document.createElement('audio');
-            audio.className = 'modal-media modal-audio';
-            audio.controls = true;
-            audio.autoplay = false; // 不自动播放,让用户控制
-            return audio;
-        },
-        load: async (dom, blobUrl) => {
-            // 直接设置 src,不需要等待加载
-            dom.src = blobUrl;
+        types: FileTypes.audio.all,
+        createDOM: () => audioPlayerInstance.createDOM(),
+        load: async (dom, blobUrl, fileData) => {
+            await audioPlayerInstance.load(dom, blobUrl, fileData);
+
+            // 保存清理函数
+            dom._audioCleanup = () => {
+                audioPlayerInstance.cleanup();
+            };
         }
     }
 };
@@ -328,10 +326,11 @@ class ImageModal {
         const distance = Math.sqrt(moveX * moveX + moveY * moveY);
         const isClick = distance < 5 && clickDuration < 300;
 
-        // 如果是点击且不在媒体元素上,关闭 Modal
+        // 如果是点击且不在媒体元素或音频播放器上,关闭 Modal
         if (isClick) {
             const mediaElement = e.target.closest('video, audio');
-            if (!mediaElement) {
+            const audioPlayer = e.target.closest('.modal-audio-player');
+            if (!mediaElement && !audioPlayer) {
                 this.close();
             }
         }
@@ -405,7 +404,13 @@ class ImageModal {
                 const moveY = touch.clientY - this.mouseDownY;
                 const distance = Math.sqrt(moveX * moveX + moveY * moveY);
                 const isTap = distance < 10 && touchDuration < 300;
-                if (isTap) this.close();
+                if (isTap) {
+                    // 检查是否点击在音频播放器上
+                    const audioPlayer = e.target.closest('.modal-audio-player');
+                    if (!audioPlayer) {
+                        this.close();
+                    }
+                }
             }
             this.initialDistance = 0;
             this.panning = false;
