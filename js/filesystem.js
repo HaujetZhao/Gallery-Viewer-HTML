@@ -23,7 +23,7 @@ async function openFolderPicker() {
         await scanDirectory(rootData);
 
         createRootNode(rootData);
-        loadFolder(handle.name);
+        loadFolder(rootData);
         startBackgroundScan(handle, handle.name);
 
     } catch (err) {
@@ -128,7 +128,7 @@ function getFolderData(dirHandle, path) {
         }
 
         // 创建新的 Folder 实例
-        folderData = new Folder({
+        folderData = new SmartFolder({
             handle: dirHandle,
             name: name,
             parent: parent
@@ -183,7 +183,7 @@ async function handleFolderClick(path, li) {
         }
 
         // 文件夹有效，正常加载
-        loadFolder(path);
+        loadFolder(folderData);
         await refreshFolder(path, true);
 
     } catch (err) {
@@ -193,48 +193,63 @@ async function handleFolderClick(path, li) {
         if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
             await handleFolderNotFound(folderData);
         } else {
-            showToast("加载文件夹失败: " + err.message, "error");
+            showToast("加载失败: " + err.message, "error");
         }
     }
 }
 
-function loadFolder(path) {
+
+/**
+ * 加载并显示指定文件夹的内容
+ * 
+ * 此函数负责:
+ * 1. 切换到单文件夹模式(退出全部照片模式)
+ * 2. 更新当前路径状态
+ * 3. 更新 UI 显示(路径、树节点高亮)
+ * 4. 渲染画廊显示文件
+ * 
+ * @param {SmartFolder} folderData - 文件夹对象
+ */
+function loadFolder(folderData) {
     appState.allPhotosMode = false;
     UI.refreshBtn.textContent = "刷新目录";
     UI.refreshBtn.title = "仅重新扫描当前文件夹的文件变动";
 
+    const path = folderData.getPath();
     appState.currentPath = path;
     updateActiveTreeNode(path);
     UI.pathDisplay.textContent = path;
 
-    const data = appState.foldersData.get(path);
-    if (!data) {
-        UI.gallery.innerHTML = '<div class="empty-state">目录数据未就绪</div>';
-        return;
-    }
-
-    globals.currentDisplayList = data.files;
+    globals.currentDisplayList = folderData.files;
     renderGallery(globals.currentDisplayList);
 }
 
 async function switchToAllPhotos() {
     appState.allPhotosMode = true;
-    appState.currentPath = "ALL_PHOTOS";
+    appState.currentPath = "ALL_MEDIA";
     UI.refreshBtn.textContent = "重载项目";
     UI.refreshBtn.title = "重新扫描整个项目文件树";
     UI.pathDisplay.textContent = "所有媒体";
-    updateActiveTreeNode("ALL_PHOTOS");
+    updateActiveTreeNode("ALL_MEDIA");
 
     UI.gallery.innerHTML = '<div class="loader">正在聚合文件...</div>';
 
     await new Promise(r => setTimeout(r, 10));
 
+    // 收集所有文件
     let allFiles = [];
     for (const [path, data] of appState.foldersData.entries()) {
-        if (data && data.files && data.files.length > 0) {
+        if (path !== 'ALL_MEDIA' && data && data.files && data.files.length > 0) {
             allFiles = allFiles.concat(data.files);
         }
     }
+
+    // 将文件添加到 ALL_MEDIA_FOLDER
+    ALL_MEDIA_FOLDER.files = allFiles;
+
+    // 将 ALL_MEDIA_FOLDER 添加到 foldersData
+    appState.foldersData.set('ALL_MEDIA', ALL_MEDIA_FOLDER);
+
     globals.currentDisplayList = allFiles;
     UI.pathDisplay.textContent = `所有媒体 (共 ${globals.currentDisplayList.length} 个)`;
 
@@ -256,15 +271,28 @@ async function handleRefreshAction() {
     }
 }
 
+/**
+ * 刷新文件夹数据
+ * 
+ * 只负责重新扫描文件夹并更新数据,不更新 UI
+ * 调用者需要手动调用 loadFolder() 或 renderGallery() 来更新 UI
+ * 
+ * @param {string} folderPath - 文件夹路径
+ * @param {boolean} silent - 是否静默(不显示 Toast)
+ * @returns {Promise<SmartFolder>} 返回刷新后的文件夹对象
+ */
 async function refreshFolder(folderPath, silent = false) {
     if (!appState.rootHandle) {
         if (!silent) showToast("无法刷新：未找到目录信息", "error");
-        return;
+        return null;
     }
 
-    // 只有在刷新当前目录时才提示
-    const isCurrent = (folderPath === appState.currentPath);
-    if (isCurrent && !silent) showToast("正在刷新...", "info");
+    // 特殊处理: ALL_MEDIA 模式
+    if (folderPath === 'ALL_MEDIA') {
+        if (!silent) showToast("正在刷新所有媒体...", "info");
+        await switchToAllPhotos();
+        return ALL_MEDIA_FOLDER;
+    }
 
     try {
         let folderData = appState.foldersData.get(folderPath);
@@ -281,18 +309,18 @@ async function refreshFolder(folderPath, silent = false) {
         // 深度复用扫描：直接原地更新 folderData
         await scanDirectory(folderData);
 
-        // 更新 UI
+        // 更新侧边栏 UI
         updateFolderCount(folderPath);
 
         // 重新同步子树结构（如果子文件夹有变）
         await syncTreeStructure(folderPath, folderData.subFolders);
 
-        if (isCurrent) {
-            loadFolder(folderPath);
-            if (!silent) showToast("目录已刷新");
-        }
+        if (!silent) showToast("目录已刷新");
+
+        return folderData;
     } catch (e) {
         if (e.name === 'NotFoundError' || (e.message && e.message.includes('not found'))) {
+            const isCurrent = (folderPath === appState.currentPath);
             if (isCurrent) {
                 showToast(`文件夹 "${folderPath}" 已被删除`, "error");
                 UI.gallery.innerHTML = '<div class="empty-state">文件夹已失效</div>';
@@ -303,6 +331,7 @@ async function refreshFolder(folderPath, silent = false) {
             console.error("刷新失败", e);
             if (!silent) showToast("刷新失败: " + e.message, "error");
         }
+        return null;
     }
 }
 
@@ -326,7 +355,8 @@ async function reloadProject() {
         await scanDirectory(rootData);
 
         createRootNode(rootData);
-        loadFolder(handle.name);
+        const reloadedRoot = appState.foldersData.get(handle.name);
+        if (reloadedRoot) loadFolder(reloadedRoot);
         startBackgroundScan(handle, handle.name);
         showToast("项目已重新加载");
     } catch (err) {
@@ -352,22 +382,29 @@ async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
         const targetFolder = appState.foldersData.get(targetPath);
         if (!targetFolder) throw new Error("目标文件夹未找到");
 
-        // 使用 SmartFile 的 move 方法
-        await sourceFile.move(targetFolder);
+        // 使用操作历史系统执行移动
+        await moveFileWithHistory(sourceFile, targetFolder);
 
-        showToast(`已移动: ${data.name}`, "success");
+        showToast(`已移动: ${data.name} (Ctrl+Z 撤销)`, "success");
 
-        // 刷新源目录 和 目标目录
-        // 因为 refreshFolder 是 "smart" 的，会原地更新数据并复用，所以性能开销可控
-        await refreshFolder(data.sourceDir, true);
-
-        const folderData = appState.foldersData.get(targetPath);
-        if (folderData && folderData.scanned) {
+        // 刷新目标目录 (如果已扫描)
+        const targetFolderData = appState.foldersData.get(targetPath);
+        if (targetFolderData && targetFolderData.scanned) {
             await refreshFolder(targetPath, true);
         }
 
-        if (appState.currentPath === data.sourceDir) {
-            renderGallery(globals.currentDisplayList);
+        // 刷新源目录和 UI
+        if (appState.currentPath === 'ALL_MEDIA') {
+            // ALL_MEDIA 模式: 文件还在列表中,不需要刷新
+        } else if (appState.currentPath === data.sourceDir) {
+            // 当前在源目录: 刷新数据并更新 UI
+            const sourceFolderData = await refreshFolder(data.sourceDir, true);
+            if (sourceFolderData) {
+                loadFolder(sourceFolderData);
+            }
+        } else {
+            // 不在源目录: 只刷新数据
+            await refreshFolder(data.sourceDir, true);
         }
 
     } catch (err) {

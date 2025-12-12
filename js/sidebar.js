@@ -192,7 +192,7 @@ function updateActiveTreeNode(path) {
     });
 
     // 处理特殊的 "所有图片" 节点
-    if (path === 'ALL_PHOTOS') {
+    if (path === 'ALL_MEDIA') {
         const allPhotosNode = document.getElementById('allPhotosNode');
         if (allPhotosNode) allPhotosNode.classList.add('active');
         return;
@@ -306,7 +306,7 @@ function removeTreeNode(path) {
 
 function updateFolderIconState(path) {
     // 特殊节点不处理
-    if (path === 'ALL_PHOTOS') return;
+    if (path === 'ALL_MEDIA') return;
 
     const folderData = appState.foldersData.get(path);
     if (folderData && typeof folderData.updateIconState === 'function') {

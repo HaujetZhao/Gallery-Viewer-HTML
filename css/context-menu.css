@@ -1,0 +1,85 @@
+/* 文件夹右键菜单样式 */
+.context-menu {
+    position: fixed;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    min-width: 180px;
+    z-index: 10000;
+    font-size: 14px;
+    display: block;
+    /* 确保菜单可见 */
+}
+
+.context-menu.hidden {
+    display: none;
+}
+
+.context-menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background-color 0.2s ease;
+    user-select: none;
+}
+
+.context-menu-item:hover {
+    background-color: #f5f5f5;
+}
+
+.context-menu-item i {
+    width: 16px;
+    text-align: center;
+    color: #666;
+}
+
+.context-menu-item span {
+    flex: 1;
+    color: #333;
+}
+
+.context-menu-item.danger:hover {
+    background-color: #fee;
+}
+
+.context-menu-item.danger i,
+.context-menu-item.danger span {
+    color: #e74c3c;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background-color: #e0e0e0;
+    margin: 4px 0;
+}
+
+/* 暗色主题适配 */
+@media (prefers-color-scheme: dark) {
+    .context-menu {
+        background: #2c3e50;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .context-menu-item:hover {
+        background-color: #34495e;
+    }
+
+    .context-menu-item i {
+        color: #bbb;
+    }
+
+    .context-menu-item span {
+        color: #ecf0f1;
+    }
+
+    .context-menu-item.danger:hover {
+        background-color: #3d2a2a;
+    }
+
+    .context-menu-divider {
+        background-color: #34495e;
+    }
+}

@@ -276,10 +276,11 @@ class SmartFile {
     }
 }
 
+
 /**
- * Folder 类 - 表示一个文件夹
+ * SmartFolder 类 - 表示一个文件夹
  */
-class Folder {
+class SmartFolder {
     constructor({ handle, name, parent = null }) {
         this.handle = handle;           // FileSystemDirectoryHandle
         this.name = name;               // 文件夹名
@@ -321,10 +322,30 @@ class Folder {
         }
 
         try {
-            // 使用 File System Access API 的 move 方法重命名
-            await this.handle.move(newName);
+            // 注意: File System Access API 的 move() 方法是实验性的,可能不被支持
+            // 我们使用一个变通方法:
+            // 1. 在父目录创建新名称的文件夹
+            // 2. 递归复制所有内容
+            // 3. 删除旧文件夹
+            // 但这个操作非常复杂且耗时,所以我们暂时只支持空文件夹重命名
+
+            // 检查是否为空文件夹
+            const isEmpty = this.files.length === 0 && this.subFolders.length === 0;
+            if (!isEmpty) {
+                throw new Error('当前只支持重命名空文件夹。非空文件夹重命名功能开发中。');
+            }
+
+            // 创建新文件夹
+            await this.parent.handle.getDirectoryHandle(newName, { create: true });
+
+            // 删除旧文件夹
+            await this.parent.handle.removeEntry(this.name);
+
+            // 获取新文件夹的 handle
+            const newHandle = await this.parent.handle.getDirectoryHandle(newName);
 
             // 更新自身属性
+            this.handle = newHandle;
             this.name = newName;
 
             return true;
@@ -619,4 +640,39 @@ class Folder {
         }
     }
 }
+
+/**
+ * 创建虚拟的 ALL_MEDIA SmartFolder
+ * 这是一个特殊的文件夹对象,用于表示"所有媒体"视图
+ */
+function createAllMediaFolder() {
+    const allMediaFolder = new SmartFolder({
+        handle: null,  // 虚拟文件夹没有实际的 handle
+        name: 'ALL_MEDIA',
+        parent: null
+    });
+
+    // 标记为虚拟文件夹
+    allMediaFolder.isVirtual = true;
+
+    // 重写 getPath 方法
+    allMediaFolder.getPath = function () {
+        return 'ALL_MEDIA';
+    };
+
+    // 重写 updateCount 方法 (虚拟文件夹不需要更新计数)
+    allMediaFolder.updateCount = function () {
+        // 不执行任何操作
+    };
+
+    // 重写 updateIconState 方法
+    allMediaFolder.updateIconState = function () {
+        // 不执行任何操作
+    };
+
+    return allMediaFolder;
+}
+
+// 创建全局 ALL_MEDIA 文件夹实例
+const ALL_MEDIA_FOLDER = createAllMediaFolder();
 

@@ -22,7 +22,7 @@ function setupEventListeners() {
             e.target.id !== 'settingBtn') {
             hideSettingsModal();
         }
-        UI.contextMenu.classList.remove('show');
+        // 菜单关闭由 contextMenuManager 统一处理
     });
 
     UI.refreshBtn.addEventListener('click', handleRefreshAction);
@@ -55,27 +55,7 @@ function setupEventListeners() {
     UI.settingBar.addEventListener('click', (e) => {
     });
 
-    const ctxRename = document.getElementById('ctxRename');
-    const ctxDelete = document.getElementById('ctxDelete');
-    const ctxProperties = document.getElementById('ctxProperties');
-
-    if (ctxProperties) {
-        ctxProperties.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showImageProperties();
-        });
-    }
-
-    document.getElementById('ctxRename').addEventListener('click', () => {
-        const fileData = UI.contextMenu.fileData;
-        if (fileData) {
-            UI.contextMenu.classList.remove('show');
-            enableInlineRename(fileData.dom, fileData);
-        }
-    });
-
-    document.getElementById('ctxDelete').addEventListener('click', handleDelete);
-
+    // 菜单项事件绑定已移至 context-menu-manager.js
 
     const closePropsBtn = document.querySelector('.close-props-btn');
     const propsModal = document.getElementById('propertiesModal');
@@ -102,20 +82,19 @@ function handleGalleryClick(e) {
 function handleContextMenu(e) {
     e.preventDefault();
     const card = e.target.closest('.photo-card');
-    if (!card) return;
+    if (!card || !card.fileData) return;
 
-    const menu = UI.contextMenu;
+    // 使用统一的菜单管理器
+    contextMenuManager.show('file', e.clientX, e.clientY, card.fileData, {
+        adjustItems: (menu, fileData) => {
+            // 保存 fileData 到菜单元素(兼容旧代码)
+            menu.fileData = fileData;
 
-    // 直接保存 fileData 引用（更可靠）
-    menu.fileData = card.fileData;
-
-    // 保留索引用于其他功能
-    const idx = parseInt(card.dataset.currentIndex);
-    menu.dataset.displayIndex = idx;
-
-    menu.style.top = `${e.clientY}px`;
-    menu.style.left = `${e.clientX}px`;
-    menu.classList.add('show');
+            // 保留索引用于其他功能
+            const idx = parseInt(card.dataset.currentIndex);
+            menu.dataset.displayIndex = idx;
+        }
+    });
 }
 
 function handleKeyDown(e) {
@@ -265,13 +244,13 @@ function enableInlineRename(card, fileData) {
             return;
         }
         try {
-            // 使用 SmartFile 的 rename 方法（会自动更新 name 和 path）
-            await fileData.rename(newName);
+            // 使用操作历史系统执行重命名
+            await renameFileWithHistory(fileData, newName);
 
             // 更新 DOM 显示
             nameEl.textContent = newName;
 
-            showToast("重命名成功");
+            showToast("重命名成功 (Ctrl+Z 撤销)");
             cleanup();
         } catch (e) {
             showToast("重命名失败: " + e.message, "error");
@@ -300,48 +279,30 @@ function enableInlineRename(card, fileData) {
     input.addEventListener('blur', commit);
 }
 
-async function handleDelete() {
-    const fileData = UI.contextMenu.fileData;
-    if (!fileData) return;
-
-    try {
-        const deleteInfo = await moveFileToTrash(fileData);
-        fileData.dom.remove();
-        updateFolderCount(deleteInfo.parentPath);
-
-        // 保存删除信息到历史记录
-        appState.deleteHistory.push(deleteInfo);
-
-        // 刷新文件夹
-        refreshFolder(appState.currentPath, silent = true);
-
-        showToast("已移动到 .trash 回收站（Ctrl+Z 撤销）");
-    } catch (e) {
-        console.error(e);
-        showToast("操作失败: " + e.message, "error");
-    }
-}
-
 async function handleUndo() {
-    if (appState.deleteHistory.length === 0) {
-        showToast("没有可撤销的删除操作", "info");
-        return;
-    }
-
-    const deleteInfo = appState.deleteHistory.pop();
-
     try {
-        const restoredName = await restoreFromTrash(deleteInfo);
-        showToast(`已恢复: ${restoredName}`, "success");
+        // 使用操作历史系统撤销
+        const description = await undoLastOperation();
+        showToast(`已撤销: ${description}`, "success");
 
-        // 如果当前在该文件夹，刷新显示
-        if (appState.currentPath === deleteInfo.parentPath) {
-            renderGallery(globals.currentDisplayList);
+        // 静默刷新当前显示(不显示刷新 Toast)
+        if (appState.currentPath) {
+            const folderData = await refreshFolder(appState.currentPath, true);
+            if (folderData) {
+                // 手动更新 UI
+                if (appState.currentPath === 'ALL_MEDIA') {
+                    // ALL_MEDIA 已经在 switchToAllPhotos 中更新了
+                } else {
+                    loadFolder(folderData);
+                }
+            }
         }
     } catch (e) {
         console.error(e);
-        showToast("恢复失败: " + e.message, "error");
-        // 恢复失败，把记录放回去
-        appState.deleteHistory.push(deleteInfo);
+        if (e.message === '没有可撤销的操作') {
+            showToast("没有可撤销的操作", "info");
+        } else {
+            showToast("撤销失败: " + e.message, "error");
+        }
     }
 }

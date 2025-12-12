@@ -9,6 +9,8 @@
         href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%0A%20%20%3Crect%20x%3D%221%22%20y%3D%221%22%20width%3D%2298%22%20height%3D%2298%22%20rx%3D%2214.7%22%20ry%3D%2214.7%22%20fill%3D%22%232c3e50%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M160%2032c-35.3%200-64%2028.7-64%2064V320c0%2035.3%2028.7%2064%2064%2064H512c35.3%200%2064-28.7%2064-64V96c0-35.3-28.7-64-64-64H160zM396%20138.7l96%20144c4.9%207.4%205.4%2016.8%201.2%2024.6S480.9%20320%20472%20320H328%20280%20200c-9.2%200-17.6-5.3-21.6-13.6s-2.9-18.2%202.9-25.4l64-80c4.6-5.7%2011.4-9%2018.7-9s14.2%203.3%2018.7%209l17.3%2021.6%2056-84C360.5%20132%20368%20128%20376%20128s15.5%204%2020%2010.7z%22%20fill%3D%22%23ffffff%22%20transform%3D%22translate(9%2C%2015)%20scale(0.13671875)%22%2F%3E%0A%3C%2Fsvg%3E">
     <title>相册浏览器</title>
     <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/context-menu.css">
+    <link rel="stylesheet" href="css/confirm-dialog.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 引入 SparkMD5 用于计算文件哈希 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
@@ -159,13 +161,6 @@
         <div id="modalLoader" class="loader hidden"><i class="fas fa-spinner fa-spin"></i></div>
     </div>
 
-    <!-- 右键/操作菜单 -->
-    <div id="contextMenu" class="context-menu">
-        <div class="menu-item" id="ctxProperties"><i class="fas fa-info-circle"></i> 属性</div>
-        <div class="menu-item" id="ctxRename"><i class="fas fa-edit"></i> 重命名</div>
-        <div class="menu-item delete" id="ctxDelete"><i class="fas fa-trash-alt"></i> 删除</div>
-    </div>
-
     <!-- 属性弹窗 -->
     <div id="propertiesModal" class="modal hidden">
         <div class="modal-content properties-content">
@@ -198,6 +193,9 @@
     <script src="js/thumbnails.js"></script>
     <script src="js/gallery.js"></script>
     <script src="js/sidebar.js"></script>
+    <script src="js/context-menu-manager.js"></script>
+    <script src="js/confirm-dialog.js"></script>
+    <script src="js/operation-history.js"></script>
     <script src="js/audio-player.js"></script>
     <script src="js/modal.js"></script>
     <script src="js/recovery.js"></script>

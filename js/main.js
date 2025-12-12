@@ -7,10 +7,11 @@ async function init() {
     }
 
     setupEventListeners();
-    setupSidebarEvents(); 
+    setupSidebarEvents();
     setupIntersectionObserver();
     setupScrollZone();
     setupCSSBasedResizer();
+    initContextMenus();
 
     const pinned = localStorage.getItem('sidebarPinned') === 'true';
     if (pinned) toggleSidebarPin(true);

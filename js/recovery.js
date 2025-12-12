@@ -41,7 +41,7 @@ async function handleFolderNotFound(folderData) {
         }
 
         // 6. 加载恢复后的文件夹
-        loadFolder(ancestorPath);
+        loadFolder(validAncestor);
         if (validAncestor.setActive) {
             validAncestor.setActive();
         }
