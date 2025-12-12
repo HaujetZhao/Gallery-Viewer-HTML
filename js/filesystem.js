@@ -184,7 +184,7 @@ async function handleFolderClick(path, li) {
 
         // 文件夹有效，正常加载
         loadFolder(folderData);
-        await refreshFolder(path, true);
+        await refreshFolder(folderData, true);
 
     } catch (err) {
         console.error("文件夹点击处理失败:", err);
@@ -267,7 +267,12 @@ async function handleRefreshAction() {
             reloadProject();
         }
     } else {
-        await refreshFolder(appState.currentPath);
+        const currentFolder = appState.foldersData.get(appState.currentPath);
+        if (currentFolder) {
+            await refreshFolder(currentFolder);
+        } else if (appState.currentPath === 'ALL_MEDIA') {
+            await refreshFolder(ALL_MEDIA_FOLDER);
+        }
     }
 }
 
@@ -277,30 +282,37 @@ async function handleRefreshAction() {
  * 只负责重新扫描文件夹并更新数据,不更新 UI
  * 调用者需要手动调用 loadFolder() 或 renderGallery() 来更新 UI
  * 
- * @param {string} folderPath - 文件夹路径
+ * @param {SmartFolder} folderData - 文件夹对象
  * @param {boolean} silent - 是否静默(不显示 Toast)
  * @returns {Promise<SmartFolder>} 返回刷新后的文件夹对象
  */
-async function refreshFolder(folderPath, silent = false) {
+async function refreshFolder(folderData, silent = false) {
     if (!appState.rootHandle) {
         if (!silent) showToast("无法刷新：未找到目录信息", "error");
         return null;
     }
 
     // 特殊处理: ALL_MEDIA 模式
-    if (folderPath === 'ALL_MEDIA') {
+    if (folderData === ALL_MEDIA_FOLDER) {
         if (!silent) showToast("正在刷新所有媒体...", "info");
         await switchToAllPhotos();
         return ALL_MEDIA_FOLDER;
     }
 
-    try {
-        let folderData = appState.foldersData.get(folderPath);
+    if (!folderData || typeof folderData !== 'object') {
+        console.error("refreshFolder 需要有效的 SmartFolder 对象", folderData);
+        return null;
+    }
 
-        if (!folderData || !folderData.handle) {
+    const folderPath = folderData.getPath ? folderData.getPath() : folderData.path;
+
+    try {
+        if (!folderData.handle) {
             // 尝试从 rootHandle 恢复（如果是根目录）
             if (folderPath === appState.rootHandle.name) {
-                folderData = getFolderData(appState.rootHandle, folderPath);
+                // 原地恢复 handle
+                folderData.handle = appState.rootHandle;
+                appState.dirMap.set(folderPath, appState.rootHandle);
             } else {
                 throw new Error("目录句柄丢失");
             }
@@ -310,7 +322,9 @@ async function refreshFolder(folderPath, silent = false) {
         await scanDirectory(folderData);
 
         // 更新侧边栏 UI
-        updateFolderCount(folderPath);
+        if (typeof updateFolderCount === 'function') {
+            updateFolderCount(folderPath); // 暂时保持使用 path
+        }
 
         // 重新同步子树结构（如果子文件夹有变）
         await syncTreeStructure(folderPath, folderData.subFolders);
@@ -390,7 +404,7 @@ async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
         // 刷新目标目录 (如果已扫描)
         const targetFolderData = appState.foldersData.get(targetPath);
         if (targetFolderData && targetFolderData.scanned) {
-            await refreshFolder(targetPath, true);
+            await refreshFolder(targetFolderData, true);
         }
 
         // 刷新源目录和 UI
@@ -398,13 +412,19 @@ async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
             // ALL_MEDIA 模式: 文件还在列表中,不需要刷新
         } else if (appState.currentPath === data.sourceDir) {
             // 当前在源目录: 刷新数据并更新 UI
-            const sourceFolderData = await refreshFolder(data.sourceDir, true);
-            if (sourceFolderData) {
-                loadFolder(sourceFolderData);
+            const sourceFolder = appState.foldersData.get(data.sourceDir);
+            if (sourceFolder) {
+                const sourceFolderData = await refreshFolder(sourceFolder, true);
+                if (sourceFolderData) {
+                    loadFolder(sourceFolderData);
+                }
             }
         } else {
             // 不在源目录: 只刷新数据
-            await refreshFolder(data.sourceDir, true);
+            const sourceFolder = appState.foldersData.get(data.sourceDir);
+            if (sourceFolder) {
+                await refreshFolder(sourceFolder, true);
+            }
         }
 
     } catch (err) {
@@ -515,7 +535,10 @@ async function restoreFromTrash(deleteInfo) {
     await fileHandle.move(parentHandle, originalName);
 
     // 3. 刷新父文件夹以更新数据
-    await refreshFolder(parentPath, true);
+    const parentFolder = appState.foldersData.get(parentPath);
+    if (parentFolder) {
+        await refreshFolder(parentFolder, true);
+    }
 
     return originalName;
 }

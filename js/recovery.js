@@ -72,7 +72,7 @@ async function handleFileNotFound(fileData) {
 
         // 1. 刷新父文件夹
         const parentPath = fileData.parent.getPath();
-        await refreshFolder(parentPath, true);
+        await refreshFolder(fileData.parent, true);
 
         // 2. 检查文件是否还存在
         const stillExists = fileData.parent.findFile(fileData.name);

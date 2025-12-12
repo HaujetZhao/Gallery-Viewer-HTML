@@ -222,9 +222,11 @@ async function handleFileDelete(fileData) {
             fileData.dom.remove();
         }
 
-        // 刷新文件夹显示
         if (appState.currentPath) {
-            refreshFolder(appState.currentPath, true);
+            const currentFolder = appState.foldersData.get(appState.currentPath);
+            if (currentFolder) {
+                refreshFolder(currentFolder, true);
+            }
         }
 
         showToast("已移动到 .trash 回收站(Ctrl+Z 撤销)");
@@ -330,7 +332,10 @@ async function handleDeleteFolder(folderData) {
         }
 
         // 刷新父文件夹
-        await refreshFolder(parentPath);
+        // 刷新父文件夹
+        if (folderData.parent) {
+            await refreshFolder(folderData.parent);
+        }
 
         // 如果当前显示的是被删除的文件夹,切换到父文件夹
         if (appState.currentFolderPath === path) {

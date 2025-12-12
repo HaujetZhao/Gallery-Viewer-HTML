@@ -186,7 +186,7 @@ async function handleNewFolder(parentFolder) {
         const newFolderHandle = await parentFolder.handle.getDirectoryHandle(trimmedName, { create: true });
 
         // 刷新父文件夹
-        await refreshFolder(parentFolder.getPath());
+        await refreshFolder(parentFolder);
 
         showToast(`文件夹 "${trimmedName}" 创建成功`, 'success');
     } catch (err) {
@@ -255,7 +255,7 @@ async function handleRenameFolder(folderData) {
         }
 
         // 刷新父文件夹
-        await refreshFolder(parentFolder.getPath());
+        await refreshFolder(parentFolder);
 
         showToast(`文件夹已重命名为 "${trimmedName}"`, 'success');
     } catch (err) {
@@ -302,7 +302,7 @@ async function handleDeleteFolder(folderData) {
         }
 
         // 刷新父文件夹
-        await refreshFolder(parentFolder.getPath());
+        await refreshFolder(parentFolder);
 
         // 如果当前显示的是被删除的文件夹,切换到父文件夹
         if (appState.currentFolderPath === path) {

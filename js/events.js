@@ -287,13 +287,16 @@ async function handleUndo() {
 
         // 静默刷新当前显示(不显示刷新 Toast)
         if (appState.currentPath) {
-            const folderData = await refreshFolder(appState.currentPath, true);
-            if (folderData) {
-                // 手动更新 UI
-                if (appState.currentPath === 'ALL_MEDIA') {
-                    // ALL_MEDIA 已经在 switchToAllPhotos 中更新了
-                } else {
-                    loadFolder(folderData);
+            const currentFolder = appState.foldersData.get(appState.currentPath);
+            if (currentFolder) {
+                const folderData = await refreshFolder(currentFolder, true);
+                if (folderData) {
+                    // 手动更新 UI
+                    if (appState.currentPath === 'ALL_MEDIA') {
+                        // ALL_MEDIA 已经在 switchToAllPhotos 中更新了
+                    } else {
+                        loadFolder(folderData);
+                    }
                 }
             }
         }
