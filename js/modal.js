@@ -1,124 +1,171 @@
 
-const modalState = {
-    isOpen: false,
-    currentIndex: -1,
-    scale: 1,
-    panning: false,
-    pointX: 0,
-    pointY: 0,
-    startX: 0,
-    startY: 0,
-    mouseDownTime: 0,
-    mouseDownX: 0,
-    mouseDownY: 0
-};
+/**
+ * Modal 图片查看器类
+ * 负责图片的全屏查看、缩放、平移等交互功能
+ */
+class ImageModal {
+    constructor() {
+        // 当前文件数据
+        this.fileData = null;
 
-function setupModalEvents() {
-    UI.modal.addEventListener('wheel', (e) => {
-        if (!modalState.isOpen) return;
+        // 状态管理
+        this.isOpen = false;
+        this.currentIndex = -1;
+        this.scale = 1;
+        this.panning = false;
+        this.pointX = 0;
+        this.pointY = 0;
+        this.startX = 0;
+        this.startY = 0;
+        this.mouseDownTime = 0;
+        this.mouseDownX = 0;
+        this.mouseDownY = 0;
+
+        // 触摸缩放相关
+        this.initialDistance = 0;
+        this.initialScale = 1;
+
+        // DOM 元素引用
+        this.modal = UI.modal;
+        this.modalImage = UI.modalImage;
+        this.modalLoader = UI.modalLoader;
+        this.modalContent = this.modal.querySelector('.modal-content');
+
+        // 初始化事件监听
+        this.setupEvents();
+    }
+
+    /**
+     * 设置所有事件监听器
+     */
+    setupEvents() {
+        // 鼠标滚轮缩放
+        this.modal.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
+
+        // 鼠标拖拽
+        this.modal.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        window.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        window.addEventListener('mouseup', this.handleMouseUp.bind(this));
+
+        // 触摸事件
+        this.modal.addEventListener('touchstart', this.handleTouchStart.bind(this));
+        this.modal.addEventListener('touchmove', this.handleTouchMove.bind(this));
+        this.modal.addEventListener('touchend', this.handleTouchEnd.bind(this));
+    }
+
+    /**
+     * 鼠标滚轮缩放处理
+     */
+    handleWheel(e) {
+        if (!this.isOpen) return;
         e.preventDefault();
 
         const zoomIntensity = 0.15;
         const delta = e.deltaY > 0 ? -1 : 1;
         const ratio = 1 + delta * zoomIntensity;
-        const newScale = modalState.scale * ratio;
+        const newScale = this.scale * ratio;
 
         if (newScale < 0.1 || newScale > 10) return;
 
-        const imgRect = UI.modalImage.getBoundingClientRect();
-        const imgWidth = imgRect.width / modalState.scale;
-        const imgHeight = imgRect.height / modalState.scale;
+        // 以鼠标位置为中心缩放
+        const rect = this.modalContent.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left - rect.width / 2;
+        const offsetY = e.clientY - rect.top - rect.height / 2;
 
-        const modalRect = UI.modal.getBoundingClientRect();
-        const modalCenterX = modalRect.left + modalRect.width / 2;
-        const modalCenterY = modalRect.top + modalRect.height / 2;
+        this.pointX = this.pointX - offsetX * (ratio - 1);
+        this.pointY = this.pointY - offsetY * (ratio - 1);
+        this.scale = newScale;
+        this.applyTransform();
+    }
 
-        const originX = (ratio - 1) * imgWidth * 0.5;
-        const originY = (ratio - 1) * imgHeight * 0.5;
-
-        modalState.pointX = modalState.pointX - (ratio - 1) * (e.clientX - modalCenterX - modalState.pointX) - originX;
-        modalState.pointY = modalState.pointY - (ratio - 1) * (e.clientY - modalCenterY - modalState.pointY) - originY;
-
-        modalState.scale = newScale;
-        applyTransform();
-    }, { passive: false });
-
-    UI.modal.addEventListener('mousedown', (e) => {
-        if (!modalState.isOpen || e.button !== 0) return;
+    /**
+     * 鼠标按下处理
+     */
+    handleMouseDown(e) {
+        if (!this.isOpen || e.button !== 0) return;
         e.preventDefault();
-        modalState.panning = true;
-        modalState.startX = e.clientX - modalState.pointX;
-        modalState.startY = e.clientY - modalState.pointY;
-        modalState.mouseDownTime = Date.now();
-        modalState.mouseDownX = e.clientX;
-        modalState.mouseDownY = e.clientY;
-        UI.modal.style.cursor = 'grabbing';
-    });
+        this.panning = true;
+        this.startX = e.clientX - this.pointX;
+        this.startY = e.clientY - this.pointY;
+        this.mouseDownTime = Date.now();
+        this.mouseDownX = e.clientX;
+        this.mouseDownY = e.clientY;
+        this.modal.style.cursor = 'grabbing';
+    }
 
-    window.addEventListener('mousemove', (e) => {
-        if (!modalState.panning || !modalState.isOpen) return;
+    /**
+     * 鼠标移动处理
+     */
+    handleMouseMove(e) {
+        if (!this.panning || !this.isOpen) return;
         e.preventDefault();
-        const moveX = e.clientX - modalState.mouseDownX;
-        const moveY = e.clientY - modalState.mouseDownY;
+        const moveX = e.clientX - this.mouseDownX;
+        const moveY = e.clientY - this.mouseDownY;
         const distance = Math.sqrt(moveX * moveX + moveY * moveY);
         if (distance > 5) {
-            modalState.pointX = e.clientX - modalState.startX;
-            modalState.pointY = e.clientY - modalState.startY;
-            applyTransform();
+            this.pointX = e.clientX - this.startX;
+            this.pointY = e.clientY - this.startY;
+            this.applyTransform();
         }
-    });
+    }
 
-    window.addEventListener('mouseup', (e) => {
-        if (!modalState.panning) return;
-        const clickDuration = Date.now() - modalState.mouseDownTime;
-        const moveX = e.clientX - modalState.mouseDownX;
-        const moveY = e.clientY - modalState.mouseDownY;
+    /**
+     * 鼠标释放处理
+     */
+    handleMouseUp(e) {
+        if (!this.panning) return;
+        const clickDuration = Date.now() - this.mouseDownTime;
+        const moveX = e.clientX - this.mouseDownX;
+        const moveY = e.clientY - this.mouseDownY;
         const distance = Math.sqrt(moveX * moveX + moveY * moveY);
         const isClick = distance < 5 && clickDuration < 300;
 
-        if (isClick && e.target !== UI.modalImage) {
-            closeModal();
+        if (isClick) {
+            this.close();
         }
-        if (isClick) closeModal();
 
-        modalState.panning = false;
-        UI.modal.style.cursor = '';
-    });
+        this.panning = false;
+        this.modal.style.cursor = '';
+    }
 
-    let initialDistance = 0;
-    let initialScale = 1;
-    UI.modal.addEventListener('touchstart', (e) => {
-        if (!modalState.isOpen) return;
+    /**
+     * 触摸开始处理
+     */
+    handleTouchStart(e) {
+        if (!this.isOpen) return;
         if (e.touches.length === 1) {
             e.preventDefault();
-            modalState.panning = true;
+            this.panning = true;
             const touch = e.touches[0];
-            modalState.startX = touch.clientX - modalState.pointX;
-            modalState.startY = touch.clientY - modalState.pointY;
-            modalState.mouseDownTime = Date.now();
-            modalState.mouseDownX = touch.clientX;
-            modalState.mouseDownY = touch.clientY;
+            this.startX = touch.clientX - this.pointX;
+            this.startY = touch.clientY - this.pointY;
+            this.mouseDownTime = Date.now();
+            this.mouseDownX = touch.clientX;
+            this.mouseDownY = touch.clientY;
         } else if (e.touches.length === 2) {
             e.preventDefault();
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
-            initialDistance = Math.sqrt(dx * dx + dy * dy);
-            initialScale = modalState.scale;
+            this.initialDistance = Math.sqrt(dx * dx + dy * dy);
+            this.initialScale = this.scale;
         }
-    });
+    }
 
-    UI.modal.addEventListener('touchmove', (e) => {
-        if (!modalState.isOpen) return;
-        if (modalState.panning && e.touches.length === 1) {
+    /**
+     * 触摸移动处理
+     */
+    handleTouchMove(e) {
+        if (!this.isOpen) return;
+        if (this.panning && e.touches.length === 1) {
             e.preventDefault();
             const touch = e.touches[0];
-            const moveX = touch.clientX - modalState.mouseDownX;
-            const moveY = touch.clientY - modalState.mouseDownY;
+            const moveX = touch.clientX - this.mouseDownX;
+            const moveY = touch.clientY - this.mouseDownY;
             const distance = Math.sqrt(moveX * moveX + moveY * moveY);
             if (distance > 5) {
-                modalState.pointX = touch.clientX - modalState.startX;
-                modalState.pointY = touch.clientY - modalState.startY;
-                applyTransform();
+                this.pointX = touch.clientX - this.startX;
+                this.pointY = touch.clientY - this.startY;
+                this.applyTransform();
             }
         }
         if (e.touches.length === 2) {
@@ -126,112 +173,245 @@ function setupModalEvents() {
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
             const currentDistance = Math.sqrt(dx * dx + dy * dy);
-            const scaleChange = currentDistance / initialDistance;
-            const newScale = initialScale * scaleChange;
+            const scaleChange = currentDistance / this.initialDistance;
+            const newScale = this.initialScale * scaleChange;
             if (newScale < 0.1 || newScale > 10) return;
-            modalState.scale = newScale;
-            applyTransform();
-        }
-    });
-
-    UI.modal.addEventListener('touchend', (e) => {
-        if (e.touches.length === 0) {
-            const touchDuration = Date.now() - modalState.mouseDownTime;
-            const touch = e.changedTouches[0];
-            if (touch) {
-                const moveX = touch.clientX - modalState.mouseDownX;
-                const moveY = touch.clientY - modalState.mouseDownY;
-                const distance = Math.sqrt(moveX * moveX + moveY * moveY);
-                const isTap = distance < 10 && touchDuration < 300;
-                if (isTap) closeModal();
-            }
-            initialDistance = 0;
-            modalState.panning = false;
-        }
-    });
-}
-
-function resetImageTransform() {
-    modalState.scale = 1;
-    modalState.pointX = 0;
-    modalState.pointY = 0;
-    applyTransform();
-}
-
-function applyTransform() {
-    UI.modalImage.style.transform = `translate(${modalState.pointX}px, ${modalState.pointY}px) scale(${modalState.scale})`;
-}
-
-async function openModal(fileData) {
-    if (!fileData) return;
-
-    try {
-        // 验证文件是否可用
-        if (!fileData.blobUrl) {
-            const isValid = await fileData.validate();
-
-            if (!isValid) {
-                // 文件失效，执行恢复
-                const recovered = await handleFileNotFound(fileData);
-                if (!recovered) {
-                    showToast("无法打开图片：文件已被删除或移动", "error");
-                    return;
-                }
-                return; // 恢复后不继续打开，让用户重新选择
-            }
-
-            // 文件有效但没有 blobUrl，创建它
-            const file = await fileData.handle.getFile();
-            fileData.blobUrl = URL.createObjectURL(file);
-        }
-
-        modalState.isOpen = true;
-        // 使用 visibleFileList 获取正确的索引，支持排序和过滤
-        modalState.currentIndex = globals.visibleFileList.indexOf(fileData);
-        globals.currentImageIndex = modalState.currentIndex;
-
-        UI.modal.classList.remove('hidden');
-        UI.modalLoader.classList.remove('hidden');
-
-        resetImageTransform();
-
-        UI.modalImage.onload = () => {
-            UI.modalLoader.classList.add('hidden');
-            UI.modalImage.style.filter = 'brightness(1)';
-        };
-        UI.modalImage.style.filter = 'brightness(0.7)';
-        UI.modalImage.src = fileData.blobUrl;
-
-    } catch (err) {
-        console.error("打开图片失败:", err);
-
-        // 如果是 NotFoundError，尝试恢复
-        if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
-            await handleFileNotFound(fileData);
-        } else {
-            showToast("打开图片失败: " + err.message, "error");
+            this.scale = newScale;
+            this.applyTransform();
         }
     }
+
+    /**
+     * 触摸结束处理
+     */
+    handleTouchEnd(e) {
+        if (e.touches.length === 0) {
+            const touchDuration = Date.now() - this.mouseDownTime;
+            const touch = e.changedTouches[0];
+            if (touch) {
+                const moveX = touch.clientX - this.mouseDownX;
+                const moveY = touch.clientY - this.mouseDownY;
+                const distance = Math.sqrt(moveX * moveX + moveY * moveY);
+                const isTap = distance < 10 && touchDuration < 300;
+                if (isTap) this.close();
+            }
+            this.initialDistance = 0;
+            this.panning = false;
+        }
+    }
+
+    /**
+     * 重置图片变换
+     */
+    resetTransform() {
+        this.scale = 1;
+        this.pointX = 0;
+        this.pointY = 0;
+        this.applyTransform();
+    }
+
+    /**
+     * 应用变换到容器
+     */
+    applyTransform() {
+        const transform = `translate(${this.pointX}px, ${this.pointY}px) scale(${this.scale})`;
+        this.modalContent.style.transform = transform;
+    }
+
+    /**
+     * 准备文件数据（验证文件）
+     */
+    async prepareFileData() {
+        const isValid = await this.fileData.validate();
+        if (!isValid) {
+            const recovered = await handleFileNotFound(this.fileData);
+            if (!recovered) {
+                showToast("无法打开图片:文件已被删除或移动", "error");
+            }
+            return false;
+        }
+
+        // blobUrl 已在 SmartFile 构造函数中创建,无需重复创建
+        return true;
+    }
+
+    /**
+     * 显示 Modal 并设置状态
+     */
+    show() {
+        if (!this.fileData) return;
+
+        this.isOpen = true;
+        this.currentIndex = globals.visibleFileList.indexOf(this.fileData);
+        globals.currentImageIndex = this.currentIndex;
+
+        this.modal.classList.remove('hidden');
+        this.modalLoader.classList.remove('hidden');
+        this.resetTransform();
+    }
+
+    /**
+     * 加载 SVG 文件
+     */
+    loadSVG(blobUrl) {
+        this.modalImage.style.display = 'none';
+
+        // 移除旧的 SVG 容器
+        const oldSvgContainer = this.modal.querySelector('.svg-container');
+        if (oldSvgContainer) oldSvgContainer.remove();
+
+        // 创建新容器
+        const svgContainer = document.createElement('div');
+        svgContainer.className = 'svg-container';
+
+        // 读取并插入 SVG
+        fetch(blobUrl)
+            .then(response => response.text())
+            .then(svgText => {
+                svgContainer.innerHTML = svgText;
+                this.modalLoader.classList.add('hidden');
+            })
+            .catch(err => {
+                console.error('加载 SVG 失败:', err);
+                this.modalLoader.classList.add('hidden');
+                showToast('加载 SVG 失败', 'error');
+            });
+
+        this.modalContent.appendChild(svgContainer);
+    }
+
+    /**
+     * 加载普通图片
+     */
+    loadImage(blobUrl) {
+        // 移除 SVG 容器
+        const oldSvgContainer = this.modal.querySelector('.svg-container');
+        if (oldSvgContainer) oldSvgContainer.remove();
+
+        this.modalImage.style.display = 'block';
+        this.modalImage.onload = () => {
+            this.modalLoader.classList.add('hidden');
+            this.modalImage.style.filter = 'brightness(1)';
+        };
+        this.modalImage.style.filter = 'brightness(0.7)';
+        this.modalImage.src = blobUrl;
+    }
+
+    /**
+     * 打开 Modal 显示图片
+     */
+    async open(fileData) {
+        if (!fileData) return;
+
+        // 设置当前文件数据
+        this.fileData = fileData;
+
+        try {
+            // 1. 准备文件数据
+            const ready = await this.prepareFileData();
+            if (!ready) return;
+
+            // 2. 显示 Modal
+            this.show();
+
+            // 3. 根据文件类型加载内容
+            const isSVG = this.fileData.name.toLowerCase().endsWith('.svg');
+            if (isSVG) {
+                this.loadSVG(this.fileData.blobUrl);
+            } else {
+                this.loadImage(this.fileData.blobUrl);
+            }
+
+        } catch (err) {
+            console.error("打开图片失败:", err);
+
+            if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
+                await handleFileNotFound(this.fileData);
+            } else {
+                showToast("打开图片失败: " + err.message, "error");
+            }
+        }
+    }
+
+    /**
+     * 通过索引打开图片
+     */
+    openByIndex(index) {
+        if (globals.visibleFileList && index >= 0 && index < globals.visibleFileList.length) {
+            this.open(globals.visibleFileList[index]);
+        }
+    }
+
+    /**
+     * 关闭 Modal
+     */
+    close() {
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        this.panning = false;
+        this.currentIndex = -1;
+        this.fileData = null;
+        globals.currentImageIndex = -1;
+        this.modal.classList.add('hidden');
+        this.modalImage.src = '';
+
+        // 清理 SVG 容器（如果存在）
+        const svgContainer = this.modal.querySelector('.svg-container');
+        if (svgContainer) svgContainer.remove();
+    }
+
+    /**
+     * 获取当前状态
+     */
+    getState() {
+        return {
+            isOpen: this.isOpen,
+            currentIndex: this.currentIndex,
+            scale: this.scale,
+            pointX: this.pointX,
+            pointY: this.pointY
+        };
+    }
+
+    /**
+     * 复制当前图片到剪贴板
+     */
+    async copyCurrentImage() {
+        if (!this.isOpen || !this.fileData) return;
+        await copyImage(this.fileData);
+    }
+}
+
+
+// 创建全局单例
+const imageModal = new ImageModal();
+
+// 兼容旧的函数调用方式
+function setupModalEvents() {
+    // 已在 ImageModal 构造函数中初始化,此函数保留用于兼容性
+}
+
+function openModal(fileData) {
+    return imageModal.open(fileData);
 }
 
 function openModalByIndex(index) {
-    if (globals.visibleFileList && index >= 0 && index < globals.visibleFileList.length) {
-        openModal(globals.visibleFileList[index]);
-    }
+    return imageModal.openByIndex(index);
 }
 
 function closeModal() {
-    if (!modalState.isOpen) return;
-    modalState.isOpen = false;
-    modalState.panning = false;
-    modalState.currentIndex = -1;
-    globals.currentImageIndex = -1;
-    UI.modal.classList.add('hidden');
-    UI.modalImage.src = '';
+    imageModal.close();
 }
 
-function getModalState() { return modalState; }
+function getModalState() {
+    return imageModal.getState();
+}
 
+async function copyCurrentImageToClipboard() {
+    await imageModal.copyCurrentImage();
+}
+
+// 辅助函数:复制图片
 async function copyImage(fileData) {
     if (!fileData) return;
     if (typeof fileData === 'string') return;
@@ -260,12 +440,5 @@ async function copyImage(fileData) {
     } catch (error) {
         console.error("复制失败:", error);
         showToast(`复制失败: ${error.message}`, 'error');
-    }
-}
-
-async function copyCurrentImageToClipboard() {
-    if (!UI.modal.classList.contains('hidden') && globals.currentImageIndex >= 0) {
-        const file = globals.currentDisplayList[globals.currentImageIndex];
-        if (file) await copyImage(file);
     }
 }
