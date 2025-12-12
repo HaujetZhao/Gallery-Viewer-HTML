@@ -45,6 +45,7 @@ class SmartFile {
 
             // 更新自身属性
             this.name = newName;
+            this.path = this.getPath(); // 自动更新完整路径
 
             // 重新获取 File 对象
             const newFile = await this.handle.getFile();
@@ -100,7 +101,7 @@ class SmartFile {
 
     /**
      * 移动文件到另一个文件夹
-     * @param {Folder} targetFolder - 目标文件夹
+     * @param {Folder} targetFolder - 目标文件夹对象
      */
     async move(targetFolder) {
         if (!this.parent || !this.parent.handle) {
@@ -111,32 +112,23 @@ class SmartFile {
         }
 
         try {
-            // 1. 复制文件到目标文件夹
-            const newFileHandle = await targetFolder.handle.getFileHandle(this.name, { create: true });
-            const srcFile = await this.handle.getFile();
-            const writable = await newFileHandle.createWritable();
-            await writable.write(srcFile);
-            await writable.close();
+            // 使用 File System Access API 的 move 方法，handle 不变
+            await this.handle.move(targetFolder.handle);
 
-            // 2. 删除源文件
-            await this.parent.handle.removeEntry(this.name);
-
-            // 3. 从原父级的 files 数组中移除
+            // 从原父级的 files 数组中移除
             const index = this.parent.files.indexOf(this);
             if (index > -1) {
                 this.parent.files.splice(index, 1);
             }
 
-            // 4. 更新自己的属性
+            // 更新父级引用
             this.parent = targetFolder;
-            this.handle = newFileHandle;
 
-            // 5. 添加到新父级的 files 数组
+            // 添加到新父级的 files 数组
             targetFolder.files.push(this);
 
-            // 重新获取 File 对象
-            const newFile = await newFileHandle.getFile();
-            this.file = newFile;
+            // 更新路径
+            this.path = this.getPath();
 
             return true;
         } catch (err) {

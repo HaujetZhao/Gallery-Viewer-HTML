@@ -259,14 +259,11 @@ function enableInlineRename(card, fileData) {
             return;
         }
         try {
-            // 使用 SmartFile 的 rename 方法
+            // 使用 SmartFile 的 rename 方法（会自动更新 name 和 path）
             await fileData.rename(newName);
 
             // 更新 DOM 显示
             nameEl.textContent = newName;
-
-            // 更新 path 属性（保持兼容性）
-            fileData.path = fileData.getPath();
 
             showToast("重命名成功");
             cleanup();

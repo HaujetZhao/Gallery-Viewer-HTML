@@ -322,9 +322,8 @@ function enablePropertiesRename(cell, fileData) {
             return;
         }
         try {
-            await fileData.handle.move(newName);
-            fileData.name = newName;
-            fileData.path = fileData.path.replace(/[^/]+$/, newName);
+            // 使用 SmartFile 的 rename 方法（会自动更新 name 和 path）
+            await fileData.rename(newName);
 
             // 更新卡片显示
             if (fileData.dom) {
