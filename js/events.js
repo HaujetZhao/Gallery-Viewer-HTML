@@ -76,6 +76,7 @@ function setupEventListeners() {
 
     document.getElementById('ctxDelete').addEventListener('click', handleDelete);
 
+
     const closePropsBtn = document.querySelector('.close-props-btn');
     const propsModal = document.getElementById('propertiesModal');
     if (closePropsBtn && propsModal) {
@@ -83,6 +84,11 @@ function setupEventListeners() {
         propsModal.addEventListener('click', (e) => {
             if (e.target === propsModal) propsModal.classList.add('hidden');
         });
+
+        // 阻止滚轮事件冒泡到背景
+        propsModal.addEventListener('wheel', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
     }
 }
 
