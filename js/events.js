@@ -297,7 +297,6 @@ function enableInlineRename(card, fileData) {
 async function handleDelete() {
     const fileData = UI.contextMenu.fileData;
     if (!fileData) return;
-    if (!confirm(`确定要将 "${fileData.name}" 放入回收站吗？`)) return;
 
     try {
         const deleteInfo = await moveFileToTrash(fileData);
@@ -310,7 +309,7 @@ async function handleDelete() {
         // 刷新文件夹
         refreshFolder(appState.currentPath, silent = true);
 
-        showToast("已移动到 .trash 回收站");
+        showToast("已移动到 .trash 回收站（Ctrl+Z 撤销）");
     } catch (e) {
         console.error(e);
         showToast("操作失败: " + e.message, "error");
