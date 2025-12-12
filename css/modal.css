@@ -76,6 +76,12 @@
     outline: none;
 }
 
+/* 拖动模式 - 按住 Ctrl 时禁用视频/音频交互 */
+video.dragging-mode,
+audio.dragging-mode {
+    pointer-events: none;
+}
+
 .loader {
     position: absolute;
     top: 50%;

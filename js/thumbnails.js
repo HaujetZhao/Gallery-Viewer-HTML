@@ -55,8 +55,8 @@ function unobserveAll() {
 
 function redrawAllThumbnails(force) {
     unobserveAll();
-    setupIntersectionObserver(); 
-    document.querySelectorAll('.thumbnail-canvas, .thumbnail-img').forEach(el => {
+    setupIntersectionObserver();
+    document.querySelectorAll('.thumbnail-canvas, .thumbnail-img, .thumbnail-svg').forEach(el => {
         el.dataset.loaded = 'false';
         el.dataset.loading = 'false';
         if (el.tagName === 'CANVAS') {
@@ -86,7 +86,6 @@ async function processThumbnailQueue() {
     try {
         await generateAndShowThumbnail(task);
     } catch (e) {
-        console.error("生成缩略图失败", task.fileData.name, e);
         showErrorOnCanvas(task.el, "Error");
         task.el.dataset.loading = 'false';
     } finally {
@@ -97,11 +96,42 @@ async function processThumbnailQueue() {
 }
 
 async function generateAndShowThumbnail({ el, fileData, targetSize }) {
+    const strategy = el.strategy || getThumbnailStrategy(fileData.type);
+
+
+    // 对于不需要缓存的类型(GIF, SVG),直接生成
+    if (strategy.name === 'gif' || strategy.name === 'svg') {
+        try {
+            await strategy.generateThumbnail(el, fileData, targetSize);
+            el.dataset.loaded = 'true';
+            el.dataset.loading = 'false';
+
+            const loader = el.parentElement.querySelector('.loading-indicator');
+            if (loader) loader.remove();
+
+            if (observer) observer.unobserve(el);
+        } catch (err) {
+            if (el.tagName === 'CANVAS') {
+                showErrorOnCanvas(el, 'Error');
+            } else {
+                // 对于非 canvas 元素,显示错误文本
+                el.textContent = 'Error';
+                el.style.display = 'flex';
+                el.style.alignItems = 'center';
+                el.style.justifyContent = 'center';
+                el.style.color = '#999';
+            }
+            el.dataset.loading = 'false';
+        }
+        return;
+    }
+
+    // 对于需要缓存的类型,使用 MD5 缓存
     let md5 = fileData.md5;
     if (!md5) {
         try {
             const file = await fileData.handle.getFile();
-            md5 = await calculateMD5(file); // 使用全局 calculateMD5
+            md5 = await calculateMD5(file);
             fileData.md5 = md5;
         } catch (e) {
             el.dataset.loading = 'false';
@@ -110,33 +140,35 @@ async function generateAndShowThumbnail({ el, fileData, targetSize }) {
         }
     }
 
-    const cached = await getThumbnailFromDB(md5, targetSize); // 使用全局 getThumbnailFromDB
+    const cached = await getThumbnailFromDB(md5, targetSize);
     let blob = cached ? cached.blob : null;
 
     if (!blob) {
-        const img = new Image();
-        img.src = fileData.blobUrl;
-        await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-        });
+        // 使用策略生成缩略图
+        try {
+            blob = await strategy.generateThumbnail(el, fileData, targetSize);
 
-        if (el.tagName === 'CANVAS') {
-            blob = await drawToCanvasAndBlob(el, img, targetSize);
-            saveThumbnailToDB({ // 使用全局 saveThumbnailToDB
-                id: `${md5}_${targetSize}`,
-                md5, size: fileData.size, width: targetSize,
-                timestamp: Date.now(), blob
-            });
-        } else {
-            el.src = img.src;
+            if (blob) {
+                saveThumbnailToDB({
+                    id: `${md5}_${targetSize}`,
+                    md5, size: fileData.size, width: targetSize,
+                    timestamp: Date.now(), blob
+                });
+            }
+        } catch (err) {
+            console.error('生成缩略图失败:', err);
+            showErrorOnCanvas(el, 'Error');
+            el.dataset.loading = 'false';
+            return;
         }
     } else if (el.tagName === 'CANVAS') {
+        // 从缓存恢复
         const img = new Image();
         img.src = URL.createObjectURL(blob);
         await new Promise(r => img.onload = r);
         const ctx = el.getContext('2d');
-        el.width = img.width; el.height = img.height;
+        el.width = img.width;
+        el.height = img.height;
         ctx.drawImage(img, 0, 0);
         URL.revokeObjectURL(img.src);
     }

@@ -43,21 +43,18 @@ const MediaStrategies = {
 
     // 视频策略
     video: {
-        types: ['mp4', 'webm', 'ogg', 'mov'],
+        types: ['mp4', 'webm', 'mov'],
         createDOM: () => {
             const video = document.createElement('video');
             video.className = 'modal-media modal-video';
             video.controls = true;
-            video.autoplay = true;
+            video.autoplay = false; // 不自动播放,让用户控制
             video.loop = false;
             return video;
         },
         load: async (dom, blobUrl) => {
-            return new Promise((resolve, reject) => {
-                dom.onloadeddata = () => resolve();
-                dom.onerror = () => reject(new Error('视频加载失败'));
-                dom.src = blobUrl;
-            });
+            // 直接设置 src,不需要等待加载
+            dom.src = blobUrl;
         }
     },
 
@@ -68,15 +65,12 @@ const MediaStrategies = {
             const audio = document.createElement('audio');
             audio.className = 'modal-media modal-audio';
             audio.controls = true;
-            audio.autoplay = true;
+            audio.autoplay = false; // 不自动播放,让用户控制
             return audio;
         },
         load: async (dom, blobUrl) => {
-            return new Promise((resolve, reject) => {
-                dom.onloadeddata = () => resolve();
-                dom.onerror = () => reject(new Error('音频加载失败'));
-                dom.src = blobUrl;
-            });
+            // 直接设置 src,不需要等待加载
+            dom.src = blobUrl;
         }
     }
 };
@@ -117,6 +111,9 @@ class ImageModal {
         this.mouseDownTime = 0;
         this.mouseDownX = 0;
         this.mouseDownY = 0;
+
+        // Ctrl 键状态 - 用于拖动模式
+        this.isCtrlPressed = false;
 
         // 触摸缩放相关
         this.initialDistance = 0;
@@ -230,6 +227,36 @@ class ImageModal {
         this.modal.addEventListener('touchstart', this.handleTouchStart.bind(this));
         this.modal.addEventListener('touchmove', this.handleTouchMove.bind(this));
         this.modal.addEventListener('touchend', this.handleTouchEnd.bind(this));
+
+        // Ctrl 键监听 - 用于拖动模式
+        window.addEventListener('keydown', this.handleKeyDown.bind(this));
+        window.addEventListener('keyup', this.handleKeyUp.bind(this));
+    }
+
+    /**
+     * 键盘按下处理
+     */
+    handleKeyDown(e) {
+        if (e.key === 'Control' && !this.isCtrlPressed) {
+            this.isCtrlPressed = true;
+            // 给所有视频和音频元素添加 dragging-mode 类
+            this.modalContent.querySelectorAll('video, audio').forEach(el => {
+                el.classList.add('dragging-mode');
+            });
+        }
+    }
+
+    /**
+     * 键盘释放处理
+     */
+    handleKeyUp(e) {
+        if (e.key === 'Control') {
+            this.isCtrlPressed = false;
+            // 移除所有视频和音频元素的 dragging-mode 类
+            this.modalContent.querySelectorAll('video, audio').forEach(el => {
+                el.classList.remove('dragging-mode');
+            });
+        }
     }
 
     /**
@@ -262,6 +289,7 @@ class ImageModal {
      */
     handleMouseDown(e) {
         if (!this.isOpen || e.button !== 0) return;
+
         e.preventDefault();
         this.panning = true;
         this.startX = e.clientX - this.pointX;
@@ -293,14 +321,19 @@ class ImageModal {
      */
     handleMouseUp(e) {
         if (!this.panning) return;
+
         const clickDuration = Date.now() - this.mouseDownTime;
         const moveX = e.clientX - this.mouseDownX;
         const moveY = e.clientY - this.mouseDownY;
         const distance = Math.sqrt(moveX * moveX + moveY * moveY);
         const isClick = distance < 5 && clickDuration < 300;
 
+        // 如果是点击且不在媒体元素上,关闭 Modal
         if (isClick) {
-            this.close();
+            const mediaElement = e.target.closest('video, audio');
+            if (!mediaElement) {
+                this.close();
+            }
         }
 
         this.panning = false;

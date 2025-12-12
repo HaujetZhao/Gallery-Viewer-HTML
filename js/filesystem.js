@@ -1,6 +1,13 @@
 
-
-const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+// 支持的媒体文件扩展名
+const imageExtensions = [
+    // 图片
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg',
+    // 视频
+    'mp4', 'webm', 'ogg', 'mov',
+    // 音频
+    'mp3', 'wav', 'ogg', 'flac', 'm4a'
+];
 
 async function openFolderPicker() {
     try {
@@ -220,7 +227,7 @@ async function switchToAllPhotos() {
     appState.currentPath = "ALL_PHOTOS";
     UI.refreshBtn.textContent = "重载项目";
     UI.refreshBtn.title = "重新扫描整个项目文件树";
-    UI.pathDisplay.textContent = "所有图片";
+    UI.pathDisplay.textContent = "所有媒体";
     updateActiveTreeNode("ALL_PHOTOS");
 
     UI.gallery.innerHTML = '<div class="loader">正在聚合文件...</div>';
@@ -234,11 +241,11 @@ async function switchToAllPhotos() {
         }
     }
     globals.currentDisplayList = allFiles;
-    UI.pathDisplay.textContent = `所有图片 (共 ${globals.currentDisplayList.length} 张)`;
+    UI.pathDisplay.textContent = `所有媒体 (共 ${globals.currentDisplayList.length} 个)`;
 
     if (allFiles.length === 0) {
-        UI.gallery.innerHTML = '<div class="empty-state">暂无图片 (后台扫描可能仍在进行，请稍候刷新)</div>';
-        showToast("暂未发现图片，可能会在后台扫描完成后自动出现", "info");
+        UI.gallery.innerHTML = '<div class="empty-state">暂无媒体文件 (后台扫描可能仍在进行，请稍候刷新)</div>';
+        showToast("暂未发现媒体文件，可能会在后台扫描完成后自动出现", "info");
     } else {
         renderGallery(allFiles);
     }
@@ -376,7 +383,7 @@ async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
 
 async function forceRegenerateCurrentThumbnails() {
     if (globals.currentDisplayList.length === 0) {
-        showToast("当前没有图片");
+        showToast("当前没有文件");
         return;
     }
 

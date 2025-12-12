@@ -68,7 +68,7 @@ function renderGallery(fileList) {
     const observer = getObserver();
     if (observer) {
         displayFiles.forEach(f => {
-            const target = f.dom.querySelector('.thumbnail-canvas, .thumbnail-img');
+            const target = f.dom.querySelector('.thumbnail-canvas, .thumbnail-img, .thumbnail-svg');
             if (target && f.dom.dataset.loaded !== 'true') {
                 observer.observe(target);
             }
@@ -88,25 +88,20 @@ function createPhotoCard(fileData) {
     const card = document.createElement('div');
     card.className = 'photo-card';
     card.draggable = true;
-    card.fileData = fileData; // Direct binding
+    card.fileData = fileData;
 
-    const isGif = fileData.type === 'gif';
-    let mediaEl;
+    // 获取缩略图策略
+    const strategy = getThumbnailStrategy(fileData.type);
 
     const thumbContainer = document.createElement('div');
     thumbContainer.className = 'thumbnail-container';
 
-    if (isGif) {
-        mediaEl = document.createElement('img');
-        mediaEl.className = 'thumbnail-img';
-    } else {
-        mediaEl = document.createElement('canvas');
-        mediaEl.className = 'thumbnail-canvas';
-    }
-
+    // 使用策略创建缩略图元素
+    const mediaEl = strategy.createThumbnailElement();
     mediaEl.dataset.loading = 'false';
     mediaEl.dataset.loaded = 'false';
     mediaEl.fileData = fileData;
+    mediaEl.strategy = strategy; // 保存策略引用
 
     const loader = document.createElement('div');
     loader.className = 'loading-indicator';
@@ -114,6 +109,15 @@ function createPhotoCard(fileData) {
 
     thumbContainer.appendChild(mediaEl);
     thumbContainer.appendChild(loader);
+
+    // 添加媒体类型标识
+    const badge = strategy.getCardBadge();
+    if (badge) {
+        const badgeEl = document.createElement('div');
+        badgeEl.className = `media-badge ${badge.className}`;
+        badgeEl.innerHTML = `<i class="fas ${badge.icon}"></i> ${badge.text}`;
+        thumbContainer.appendChild(badgeEl);
+    }
 
     const infoName = document.createElement('div');
     infoName.className = 'card-info-filename';
