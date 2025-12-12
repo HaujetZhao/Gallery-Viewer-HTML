@@ -90,7 +90,7 @@ function createPhotoCard(fileData) {
     card.draggable = true;
     card.fileData = fileData; // Direct binding
 
-    const isGif = fileData.name.toLowerCase().endsWith('.gif');
+    const isGif = fileData.type === 'gif';
     let mediaEl;
 
     const thumbContainer = document.createElement('div');

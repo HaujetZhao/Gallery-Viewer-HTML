@@ -1,7 +1,104 @@
 
 /**
- * Modal 图片查看器类
- * 负责图片的全屏查看、缩放、平移等交互功能
+ * 媒体类型策略 - 定义不同媒体类型的处理方式
+ */
+const MediaStrategies = {
+    // 图片策略
+    image: {
+        types: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+        createDOM: () => {
+            const img = document.createElement('img');
+            img.className = 'modal-media modal-image';
+            img.draggable = false;
+            img.alt = 'Full view';
+            return img;
+        },
+        load: async (dom, blobUrl) => {
+            return new Promise((resolve, reject) => {
+                dom.onload = () => {
+                    dom.style.filter = 'brightness(1)';
+                    resolve();
+                };
+                dom.onerror = () => reject(new Error('图片加载失败'));
+                dom.style.filter = 'brightness(0.7)';
+                dom.src = blobUrl;
+            });
+        }
+    },
+
+    // SVG 策略
+    svg: {
+        types: ['svg'],
+        createDOM: () => {
+            const container = document.createElement('div');
+            container.className = 'modal-media svg-container';
+            return container;
+        },
+        load: async (dom, blobUrl) => {
+            const response = await fetch(blobUrl);
+            const svgText = await response.text();
+            dom.innerHTML = svgText;
+        }
+    },
+
+    // 视频策略
+    video: {
+        types: ['mp4', 'webm', 'ogg', 'mov'],
+        createDOM: () => {
+            const video = document.createElement('video');
+            video.className = 'modal-media modal-video';
+            video.controls = true;
+            video.autoplay = true;
+            video.loop = false;
+            return video;
+        },
+        load: async (dom, blobUrl) => {
+            return new Promise((resolve, reject) => {
+                dom.onloadeddata = () => resolve();
+                dom.onerror = () => reject(new Error('视频加载失败'));
+                dom.src = blobUrl;
+            });
+        }
+    },
+
+    // 音频策略
+    audio: {
+        types: ['mp3', 'wav', 'ogg', 'flac', 'm4a'],
+        createDOM: () => {
+            const audio = document.createElement('audio');
+            audio.className = 'modal-media modal-audio';
+            audio.controls = true;
+            audio.autoplay = true;
+            return audio;
+        },
+        load: async (dom, blobUrl) => {
+            return new Promise((resolve, reject) => {
+                dom.onloadeddata = () => resolve();
+                dom.onerror = () => reject(new Error('音频加载失败'));
+                dom.src = blobUrl;
+            });
+        }
+    }
+};
+
+/**
+ * 根据文件类型获取对应的媒体策略
+ * @param {string} fileType - 文件类型(扩展名)
+ * @returns {Object} 媒体策略对象
+ */
+function getMediaStrategy(fileType) {
+    for (const [strategyName, strategy] of Object.entries(MediaStrategies)) {
+        if (strategy.types.includes(fileType)) {
+            return { name: strategyName, ...strategy };
+        }
+    }
+    // 默认使用图片策略
+    return { name: 'image', ...MediaStrategies.image };
+}
+
+/**
+ * Modal 媒体查看器类
+ * 支持图片、SVG、视频、音频等多种媒体类型
  */
 class ImageModal {
     constructor() {
@@ -31,8 +128,90 @@ class ImageModal {
         this.modalLoader = UI.modalLoader;
         this.modalContent = this.modal.querySelector('.modal-content');
 
+        // 历史缓存配置
+        this.maxCacheSize = 10; // 最多缓存 10 个媒体的 DOM
+
+        // LRU 缓存: Map 保持插入顺序,key 为 blobUrl,value 为缓存对象
+        this.cache = new Map();
+
         // 初始化事件监听
         this.setupEvents();
+    }
+
+    /**
+     * 获取或创建缓存项
+     * @param {SmartFile} fileData - 文件数据
+     * @returns {Object} 缓存对象 { dom, strategy, loaded }
+     */
+    getOrCreateCache(fileData) {
+        const key = fileData.blobUrl;
+
+        // 如果缓存中存在,移到最前面(最近使用)
+        if (this.cache.has(key)) {
+            const cached = this.cache.get(key);
+            console.log(`[Modal Cache] 🎯 命中缓存:`, {
+                file: fileData.name,
+                type: cached.strategy.name,
+                loaded: cached.loaded,
+                cacheSize: this.cache.size
+            });
+            this.cache.delete(key);
+            this.cache.set(key, cached);
+            return cached;
+        }
+
+        // 获取媒体策略
+        const strategy = getMediaStrategy(fileData.type);
+
+        console.log(`[Modal Cache] ✨ 创建新缓存:`, {
+            file: fileData.name,
+            type: strategy.name,
+            cacheSize: this.cache.size
+        });
+
+        // 创建 DOM
+        const dom = strategy.createDOM();
+
+        const cached = {
+            dom: dom,
+            strategy: strategy,
+            loaded: false
+        };
+
+        // 添加到缓存
+        this.cache.set(key, cached);
+
+        // 如果超过最大缓存数,删除最久未使用的
+        if (this.cache.size > this.maxCacheSize) {
+            const oldestKey = this.cache.keys().next().value;
+            const oldest = this.cache.get(oldestKey);
+
+            console.log(`[Modal Cache] 🗑️ 清理最久未使用:`, {
+                type: oldest.strategy.name,
+                newCacheSize: this.cache.size - 1
+            });
+
+            // 清理 DOM
+            if (oldest.dom && oldest.dom.parentNode) {
+                oldest.dom.remove();
+            }
+
+            this.cache.delete(oldestKey);
+        }
+
+        return cached;
+    }
+
+    /**
+     * 清空所有缓存
+     */
+    clearCache() {
+        for (const [key, cached] of this.cache) {
+            if (cached.dom && cached.dom.parentNode) {
+                cached.dom.remove();
+            }
+        }
+        this.cache.clear();
     }
 
     /**
@@ -250,52 +429,6 @@ class ImageModal {
         this.resetTransform();
     }
 
-    /**
-     * 加载 SVG 文件
-     */
-    loadSVG(blobUrl) {
-        this.modalImage.style.display = 'none';
-
-        // 移除旧的 SVG 容器
-        const oldSvgContainer = this.modal.querySelector('.svg-container');
-        if (oldSvgContainer) oldSvgContainer.remove();
-
-        // 创建新容器
-        const svgContainer = document.createElement('div');
-        svgContainer.className = 'svg-container';
-
-        // 读取并插入 SVG
-        fetch(blobUrl)
-            .then(response => response.text())
-            .then(svgText => {
-                svgContainer.innerHTML = svgText;
-                this.modalLoader.classList.add('hidden');
-            })
-            .catch(err => {
-                console.error('加载 SVG 失败:', err);
-                this.modalLoader.classList.add('hidden');
-                showToast('加载 SVG 失败', 'error');
-            });
-
-        this.modalContent.appendChild(svgContainer);
-    }
-
-    /**
-     * 加载普通图片
-     */
-    loadImage(blobUrl) {
-        // 移除 SVG 容器
-        const oldSvgContainer = this.modal.querySelector('.svg-container');
-        if (oldSvgContainer) oldSvgContainer.remove();
-
-        this.modalImage.style.display = 'block';
-        this.modalImage.onload = () => {
-            this.modalLoader.classList.add('hidden');
-            this.modalImage.style.filter = 'brightness(1)';
-        };
-        this.modalImage.style.filter = 'brightness(0.7)';
-        this.modalImage.src = blobUrl;
-    }
 
     /**
      * 打开 Modal 显示图片
@@ -303,23 +436,42 @@ class ImageModal {
     async open(fileData) {
         if (!fileData) return;
 
-        // 设置当前文件数据
-        this.fileData = fileData;
 
         try {
-            // 1. 准备文件数据
+            // 1. 设置新的文件数据
+            this.fileData = fileData;
+
+            // 2. 准备文件数据
             const ready = await this.prepareFileData();
             if (!ready) return;
 
-            // 2. 显示 Modal
+            // 3. 获取或创建缓存
+            const cached = this.getOrCreateCache(fileData);
+
+            // 4. 显示 Modal
             this.show();
 
-            // 3. 根据文件类型加载内容
-            const isSVG = this.fileData.name.toLowerCase().endsWith('.svg');
-            if (isSVG) {
-                this.loadSVG(this.fileData.blobUrl);
+            // 5. 清空当前显示的内容
+            this.clearCurrentDisplay();
+
+            // 6. 加载内容
+            if (cached.loaded) {
+                // 从缓存恢复 DOM
+                this.modalContent.appendChild(cached.dom);
+                this.modalLoader.classList.add('hidden');
             } else {
-                this.loadImage(this.fileData.blobUrl);
+                // 首次加载 - 使用策略加载
+                try {
+                    await cached.strategy.load(cached.dom, fileData.blobUrl);
+                    cached.loaded = true;
+                    this.modalContent.appendChild(cached.dom);
+                    this.modalLoader.classList.add('hidden');
+                } catch (err) {
+                    console.error('加载媒体失败:', err);
+                    this.modalLoader.classList.add('hidden');
+                    showToast(`加载失败: ${err.message}`, 'error');
+                    throw err;
+                }
             }
 
         } catch (err) {
@@ -332,6 +484,17 @@ class ImageModal {
             }
         }
     }
+
+    /**
+     * 清空当前显示的内容
+     */
+    clearCurrentDisplay() {
+        // 移除所有子元素
+        while (this.modalContent.firstChild) {
+            this.modalContent.removeChild(this.modalContent.firstChild);
+        }
+    }
+
 
     /**
      * 通过索引打开图片
@@ -347,17 +510,16 @@ class ImageModal {
      */
     close() {
         if (!this.isOpen) return;
+
         this.isOpen = false;
         this.panning = false;
         this.currentIndex = -1;
         this.fileData = null;
         globals.currentImageIndex = -1;
         this.modal.classList.add('hidden');
-        this.modalImage.src = '';
 
-        // 清理 SVG 容器（如果存在）
-        const svgContainer = this.modal.querySelector('.svg-container');
-        if (svgContainer) svgContainer.remove();
+        // 清空显示内容(但不删除缓存的 DOM)
+        this.clearCurrentDisplay();
     }
 
     /**
