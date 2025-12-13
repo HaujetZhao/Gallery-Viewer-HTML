@@ -159,6 +159,9 @@ class FileDeleteOperation extends Operation {
         // 更新内存数据
         this.parentFolder.removeFile(this.fileData);
         this._removeFromDisplayList();
+
+        // 更新父文件夹计数
+        this.parentFolder.updateCount();
     }
 
     async undo() {
@@ -189,8 +192,17 @@ class FileDeleteOperation extends Operation {
         this.fileData.handle = restoredHandle;
         this.fileData.file = restoredFile;
 
-        // 重新添加到父文件夹
-        this.parentFolder.addFile(this.fileData);
+        // 重新添加到父文件夹（带排序）
+        this.parentFolder.addFileAndSort(this.fileData);
+
+        // 重新添加到显示列表
+        if (!globals.currentDisplayList.includes(this.fileData)) {
+            globals.currentDisplayList.push(this.fileData);
+            globals.currentDisplayList.sort((a, b) => windowsCompareStrings(a.name, b.name));
+        }
+
+        // 更新父文件夹计数
+        this.parentFolder.updateCount();
     }
 
     getDescription() {

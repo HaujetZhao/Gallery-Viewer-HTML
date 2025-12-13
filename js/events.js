@@ -284,25 +284,17 @@ async function handleUndo() {
         // 使用操作历史系统撤销
         const operation = await undoLastOperation();
         const description = operation.getDescription();
-        showToast(`已撤销  ${description}`, "success");
+        showToast(`已撤销: ${description}`, "success");
 
-        // 静默刷新当前显示(不显示刷新 Toast)
+        // 重新渲染当前显示（不需要 scan）
         if (appState.currentFolder) {
-            const folderData = await refreshFolder(appState.currentFolder, true);
-            if (folderData) {
-                // 手动更新 UI
-                if (appState.allPhotosMode) {
-                    // ALL_MEDIA 已经在 switchToAllPhotos 中更新了
-                } else {
-                    await loadFolder(folderData);
-                }
+            if (appState.allPhotosMode) {
+                // ALL_MEDIA 模式：重新聚合所有文件
+                await switchToAllPhotos();
+            } else {
+                // 普通模式：直接重新渲染
+                renderGallery(globals.currentDisplayList);
             }
-        }
-
-        // 如果是移动操作，更新目标文件夹计数
-        if (operation.type === OperationType.FILE_MOVE) {
-            operation.targetFolder.updateCount();
-            operation.sourceFolder.updateCount();
         }
     } catch (e) {
         console.error(e);

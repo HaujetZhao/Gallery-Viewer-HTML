@@ -118,20 +118,23 @@ class SmartFile {
         }
 
         try {
+            const sourceFolder = this.parent;
+
             // 使用 File System Access API 的 move 方法，handle 不变
             await this.handle.move(targetFolder.handle);
 
-            // 从原父级的 files 数组中移除
-            const index = this.parent.files.indexOf(this);
-            if (index > -1) {
-                this.parent.files.splice(index, 1);
-            }
+            // 从原父级移除
+            sourceFolder.removeFile(this);
 
             // 更新父级引用
             this.parent = targetFolder;
 
-            // 添加到新父级的 files 数组
-            targetFolder.files.push(this);
+            // 添加到新父级（带排序）
+            targetFolder.addFileAndSort(this);
+
+            // 更新两个文件夹的计数
+            sourceFolder.updateCount();
+            targetFolder.updateCount();
 
             return true;
         } catch (err) {
