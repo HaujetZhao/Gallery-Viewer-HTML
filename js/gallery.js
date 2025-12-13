@@ -75,7 +75,6 @@ function renderGallery(fileList) {
         });
     }
 
-    updateFolderIconState(appState.currentPath);
 }
 
 function renderGalleryFromCache() {
@@ -150,8 +149,7 @@ function handleDragStart(e) {
     e.dataTransfer.effectAllowed = 'all';
     e.dataTransfer.setData('application/json', JSON.stringify({
         path: fileData.path,
-        name: fileData.name,
-        sourceDir: appState.currentPath
+        name: fileData.name
     }));
 
     const blobUrl = fileData.blobUrl;

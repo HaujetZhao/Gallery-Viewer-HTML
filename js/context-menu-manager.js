@@ -52,7 +52,7 @@ class ContextMenuManager {
         if (menuId === 'file' && target.dom) {
             target.dom.classList.add('context-menu-active');
         } else if (menuId === 'folder' && target.treeNode) {
-            target.treeNode.classList.add('context-menu-active');
+            target.treeNode.setContextActive();
         }
 
         // 根据选项调整菜单项
@@ -78,7 +78,7 @@ class ContextMenuManager {
                 this.currentTarget.dom.classList.remove('context-menu-active');
             }
             if (this.currentTarget.treeNode) {
-                this.currentTarget.treeNode.classList.remove('context-menu-active');
+                this.currentTarget.treeNode.setContextInactive();
             }
         }
 
@@ -222,14 +222,14 @@ async function handleFileDelete(fileData) {
             fileData.dom.remove();
         }
 
-        if (appState.currentPath) {
-            const currentFolder = appState.foldersData.get(appState.currentPath);
-            if (currentFolder) {
-                refreshFolder(currentFolder, true);
-            }
+        if (appState.currentFolder) {
+            await refreshFolder(appState.currentFolder, true);
+
+            // 重新渲染 gallery 以确保 DOM 正确排序
+            renderGallery(globals.currentDisplayList);
         }
 
-        showToast("已移动到 .trash 回收站(Ctrl+Z 撤销)");
+        showToast("已移动到 .trash 回收站（Ctrl+Z 撤销）");
     } catch (e) {
         console.error(e);
         showToast("操作失败: " + e.message, "error");
@@ -314,8 +314,8 @@ async function handleDeleteFolder(folderData) {
             return;
         }
 
-        const path = folderData.getPath();
-        const parentPath = folderData.parent.getPath();
+        const path = folderData.path;
+        const parentPath = folderData.parent.path;
 
         // 直接删除,不加入撤销队列
         await folderData.delete();
@@ -338,8 +338,8 @@ async function handleDeleteFolder(folderData) {
         }
 
         // 如果当前显示的是被删除的文件夹,切换到父文件夹
-        if (appState.currentFolderPath === path) {
-            handleFolderClick(parentPath);
+        if (appState.currentFolder === folderData) {
+            await loadFolder(folderData.parent);
         }
 
         showToast(`文件夹 "${folderName}" 已删除`, 'success');

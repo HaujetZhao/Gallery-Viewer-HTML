@@ -39,18 +39,16 @@
                 <button id="pinSidebarBtn" title="固定侧边栏"><i class="fas fa-thumbtack"></i></button>
             </div>
 
-            <div class="special-folders">
-                <ul>
-                    <li id="allPhotosNode" class="tree-node">
-                        <i class="fas fa-layer-group"></i> 所有媒体 (All Media)
-                    </li>
-                </ul>
+            <div id="virtualContainer">
+                <ul id="virtualTreeRoot"></ul>
             </div>
+
             <div class="separator-line"></div>
 
-            <div id="treeContainer">
+            <div id="folderContainer">
                 <ul id="folderTreeRoot"></ul>
             </div>
+
         </div>
 
         <div id="resize-helper"></div>
@@ -185,7 +183,9 @@
 
     <script src="js/file-types.js"></script>
     <script src="js/state.js"></script>
-    <script src="js/models.js"></script>
+    <script src="js/model.SmartFile.js"></script>
+    <script src="js/model.TreeNode.js"></script>
+    <script src="js/model.smartFolder.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/db.js"></script>

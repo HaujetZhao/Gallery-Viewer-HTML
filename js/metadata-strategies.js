@@ -48,7 +48,11 @@ const MetadataStrategies = {
                 const video = document.createElement('video');
                 video.preload = 'metadata';
                 video.muted = true;
-                video.src = fileData.blobUrl;
+
+                const cleanup = () => {
+                    video.removeAttribute('src');
+                    video.load(); // 重置 video 元素
+                };
 
                 video.addEventListener('loadedmetadata', () => {
                     const metadata = {
@@ -63,13 +67,15 @@ const MetadataStrategies = {
                     }
 
                     resolve(metadata);
-                    video.src = '';
-                });
+                    cleanup();
+                }, { once: true });
 
                 video.addEventListener('error', () => {
                     resolve({ width: 0, height: 0, duration: 0 });
-                    video.src = '';
-                });
+                    cleanup();
+                }, { once: true });
+
+                video.src = fileData.blobUrl;
             });
         },
 
@@ -89,17 +95,23 @@ const MetadataStrategies = {
             return new Promise(resolve => {
                 const audio = new Audio();
                 audio.preload = 'metadata';
-                audio.src = fileData.blobUrl;
+
+                const cleanup = () => {
+                    audio.removeAttribute('src');
+                    audio.load(); // 重置 audio 元素
+                };
 
                 audio.addEventListener('loadedmetadata', () => {
                     resolve({ duration: audio.duration });
-                    audio.src = '';
-                });
+                    cleanup();
+                }, { once: true });
 
                 audio.addEventListener('error', () => {
                     resolve({ duration: 0 });
-                    audio.src = '';
-                });
+                    cleanup();
+                }, { once: true });
+
+                audio.src = fileData.blobUrl;
             });
         },
 

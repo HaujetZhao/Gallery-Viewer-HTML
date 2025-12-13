@@ -229,8 +229,8 @@ async function handleRenameFolder(folderData) {
         await folderData.handle.move(parentFolder.handle, trimmedName);
 
         // 更新文件夹数据
-        const oldPath = folderData.getPath();
-        const newPath = parentFolder.getPath() + '/' + trimmedName;
+        const oldPath = folderData.path;
+        const newPath = parentFolder.path + '/' + trimmedName;
 
         // 从 Map 中移除旧路径
         appState.foldersData.delete(oldPath);
@@ -247,11 +247,6 @@ async function handleRenameFolder(folderData) {
             if (nameSpan) {
                 nameSpan.textContent = ' ' + trimmedName + ' ';
             }
-            folderData.treeNode.dataset.path = newPath;
-        }
-
-        if (folderData.treeList) {
-            folderData.treeList.dataset.parentPath = newPath;
         }
 
         // 刷新父文件夹
@@ -293,7 +288,7 @@ async function handleDeleteFolder(folderData) {
         await parentFolder.handle.removeEntry(folderName, { recursive: true });
 
         // 从 Map 中移除
-        const path = folderData.getPath();
+        const path = folderData.path;
         appState.foldersData.delete(path);
 
         // 移除 DOM 节点
@@ -306,7 +301,7 @@ async function handleDeleteFolder(folderData) {
 
         // 如果当前显示的是被删除的文件夹,切换到父文件夹
         if (appState.currentFolderPath === path) {
-            handleFolderClick(parentFolder.getPath());
+            handleFolderClick(parentFolder.path);
         }
 
         showToast(`文件夹 "${folderName}" 已删除`, 'success');

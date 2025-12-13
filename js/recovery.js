@@ -10,7 +10,7 @@
  */
 async function handleFolderNotFound(folderData) {
     try {
-        showToast("检测到文件夹可能已被移动或删除，正在恢复...", "warning");
+        showToast("文件夹可能已失效", "warning");
 
         // 1. 向上查找第一个可用的祖先
         const validAncestor = await folderData.findValidAncestor();
@@ -21,32 +21,33 @@ async function handleFolderNotFound(folderData) {
         }
 
         // 2. 重新扫描祖先文件夹（会自动发现变化）
-        await scanDirectory(validAncestor);
+        const scanResult = await validAncestor.scan();
 
         // 3. 同步树结构（会自动处理差异）
         //    - 删除不存在的节点
         //    - 添加新的节点
         //    - 保留未变化的节点
-        const ancestorPath = validAncestor.getPath();
-        await syncTreeStructure(ancestorPath, validAncestor.subFolders);
+        await syncTreeStructure(validAncestor);
 
         // 4. 更新 UI
         if (validAncestor.updateCount) {
             validAncestor.updateCount();
         }
 
-        // 5. 启动后台递归扫描（建立完整的文件树）
-        if (validAncestor.handle) {
-            startBackgroundScan(validAncestor.handle, ancestorPath);
+        // 5. 只对新增的子文件夹进行递归扫描（建立文件树）
+        if (scanResult.newSubFolders && scanResult.newSubFolders.length > 0) {
+            for (const newFolder of scanResult.newSubFolders) {
+                await startBackgroundScan(newFolder);
+            }
         }
 
         // 6. 加载恢复后的文件夹
-        loadFolder(validAncestor);
-        if (validAncestor.setActive) {
-            validAncestor.setActive();
-        }
+        // loadFolder(validAncestor);
+        // if (validAncestor.setActive) {
+        //     validAncestor.setActive();
+        // }
+        // showToast(`已恢复到: ${validAncestor.name}`, "success");
 
-        showToast(`已恢复到: ${validAncestor.name}`, "success");
         return validAncestor;
 
     } catch (err) {
@@ -71,7 +72,7 @@ async function handleFileNotFound(fileData) {
         showToast("检测到文件可能已被移动或删除，正在刷新...", "warning");
 
         // 1. 刷新父文件夹
-        const parentPath = fileData.parent.getPath();
+        const parentPath = fileData.parent.path;
         await refreshFolder(fileData.parent, true);
 
         // 2. 检查文件是否还存在
@@ -84,7 +85,7 @@ async function handleFileNotFound(fileData) {
             showToast("文件已被删除或移动", "info");
 
             // 3. 重新渲染当前显示列表
-            if (appState.currentPath === parentPath || appState.allPhotosMode) {
+            if (fileData.parent === appState.currentFolder || appState.allPhotosMode) {
                 renderGallery(globals.currentDisplayList);
             }
 

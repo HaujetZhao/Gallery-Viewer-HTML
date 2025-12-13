@@ -1,6 +1,6 @@
 const appState = {
     rootHandle: null,
-    currentPath: null,
+    currentFolder: null, // 当前显示的文件夹 (SmartFolder 对象)
     foldersData: new Map(),
     allPhotosMode: false,
     dirMap: new Map(),

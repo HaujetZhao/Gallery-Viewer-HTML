@@ -1,7 +1,5 @@
 
 
-// 支持的媒体文件扩展名 - 使用统一配置
-const imageExtensions = FileTypes.allMedia;
 
 
 async function openFolderPicker() {
@@ -12,19 +10,16 @@ async function openFolderPicker() {
             startIn: 'pictures'
         });
 
-        UI.hint.style.display = 'none';
         appState.rootHandle = handle;
+        UI.hint.style.display = 'none';
         appState.foldersData.clear();
-        appState.dirMap.clear();
         UI.treeRoot.innerHTML = '';
 
-        // 创建根 Folder 对象并扫描
-        const rootData = getFolderData(handle, handle.name);
-        await scanDirectory(rootData);
+        // 初始化 ALL_MEDIA_FOLDER 的 UI
+        ALL_MEDIA_FOLDER.initUI();
 
-        createRootNode(rootData);
-        loadFolder(rootData);
-        startBackgroundScan(handle, handle.name);
+        rootData = await loadProject(handle);    // 加载项目
+        await loadFolder(rootData); // 切换至根目录
 
     } catch (err) {
         if (err.name !== 'AbortError') {
@@ -34,139 +29,79 @@ async function openFolderPicker() {
     }
 }
 
-// 深度复用：在现有容器上执行增删改查
-async function scanDirectory(folderData) {
-    if (!folderData || !folderData.handle) {
-        throw new Error('scanDirectory 需要有效的 Folder 对象');
-    }
 
-    const dirHandle = folderData.handle;
-    const newFiles = [];
-    const newSubFolders = [];
-
-    // 建立旧文件索引 (用于复用)
-    const oldFileMap = new Map(folderData.files.map(f => [f.name, f]));
-
-    // 扫描文件
-    for await (const entry of dirHandle.values()) {
-        if (entry.kind !== 'file') continue;
-        const ext = entry.name.split('.').pop().toLowerCase();
-        if (!imageExtensions.includes(ext)) continue;
-        try {
-            const file = await entry.getFile();
-            let fileObj = oldFileMap.get(entry.name);
-
-            if (fileObj) {
-                // 检查是否发生变化
-                if (fileObj.size === file.size && fileObj.lastModified === file.lastModified) {
-                    // 完全没变：刷新 handle 即可
-                    fileObj.handle = entry;
-                } else {
-                    // 变了：使用 refresh 方法更新
-                    fileObj.handle = entry;
-                    await fileObj.refresh();
-                }
-                // 从 oldMap 中移除，标记为已处理
-                oldFileMap.delete(entry.name);
-            } else {
-                // 这是新文件，创建新的 SmartFile 实例
-                fileObj = new SmartFile({
-                    handle: entry,
-                    file: file,
-                    name: entry.name,
-                    parent: folderData
-                });
-
-                // 保持兼容性：添加额外属性
-                fileObj.path = folderData.getPath() + '/' + entry.name;
-            }
-            newFiles.push(fileObj);
-
-        } catch (e) { console.warn("无法读取文件:", entry.name, e); }
-    }
-
-    // 扫描子文件夹
-    for await (const entry of dirHandle.values()) {
-        if (entry.kind !== 'directory') continue;
-        if (entry.name.startsWith('.')) continue;
-        newSubFolders.push(entry);
-    }
-
-    // 处理被删除的文件（剩余在 oldFileMap 中的）
-    for (const [name, deletedFile] of oldFileMap) {
-        deletedFile.dispose();
-    }
-
-    // 排序
-    newSubFolders.sort((a, b) => a.name.localeCompare(b.name));
-    newFiles.sort((a, b) => a.name.localeCompare(b.name));
-
-    // 原地更新容器
-    folderData.files = newFiles;
-    folderData.subFolders = newSubFolders;
-    folderData.scanned = true;
-
-    return folderData;
+async function loadProject() {
+    // 创建根 Folder 对象（自动扫描）
+    const rootData = await getFolderData(appState.rootHandle);
+    rootData.treeNode.createRoot();     // 创建根节点
+    rootData.treeNode.addToUI();        // 添加到UI
+    startBackgroundScan(rootData);      // 后台扫描，加载其他节点
+    return rootData;
 }
 
-function getFolderData(dirHandle, path) {
+
+
+
+
+
+async function getFolderData(dirHandle) {
+    const parts = await appState.rootHandle.resolve(dirHandle);
+    path = [appState.rootHandle.name, ...parts].join('/');
+
     let folderData = appState.foldersData.get(path);
     if (folderData) {
         // 更新 handle (防止旧句柄失效)
         folderData.handle = dirHandle;
-        appState.dirMap.set(path, dirHandle);
-    } else {
-        // 解析路径获取文件夹名称和父级
-        const pathParts = path.split('/');
-        const name = pathParts[pathParts.length - 1];
-
-        // 获取父级 Folder 对象
-        let parent = null;
-        if (pathParts.length > 1) {
-            const parentPath = pathParts.slice(0, -1).join('/');
-            parent = appState.foldersData.get(parentPath) || null;
-        }
-
-        // 创建新的 Folder 实例
-        folderData = new SmartFolder({
-            handle: dirHandle,
-            name: name,
-            parent: parent
-        });
-
-        // 保持兼容性：添加 doms 属性
-        folderData.doms = [];
-
-        // 放入状态管理 (如果是新创建的)
-        appState.foldersData.set(path, folderData);
-        appState.dirMap.set(path, dirHandle);
+        return folderData;
     }
+
+    // 解析路径获取父级
+    const pathParts = path.split('/');
+
+    // 获取父级 Folder 对象
+    let parent = null;
+    if (pathParts.length > 1) {
+        const parentPath = pathParts.slice(0, -1).join('/');
+        parent = appState.foldersData.get(parentPath) || null;
+    }
+
+    // 使用静态工厂方法创建并扫描
+    const scanResult = await SmartFolder.create({
+        handle: dirHandle,
+        parent: parent
+    });
+
+    folderData = scanResult.folder;  // 从扫描结果中提取 folder
+
+    // 放入状态管理
+    appState.foldersData.set(path, folderData);
+
     return folderData;
 }
 
-async function startBackgroundScan(parentHandle, parentPath) {
-    const currentData = appState.foldersData.get(parentPath);
-    if (!currentData || !currentData.subFolders) return;
+async function startBackgroundScan(parentFolder) {
+    if (!parentFolder || !parentFolder.subFolders) return;
 
-    for (const subHandle of currentData.subFolders) {
-        const subPath = parentPath + '/' + subHandle.name;
+    for (const subFolderData of parentFolder.subFolders) {
+        // 扫描子文件夹（获取它的文件和子文件夹列表）
+        if (!subFolderData.scanned) {
+            await subFolderData.scan();
+        }
 
-        // 获取或创建 Folder 对象再扫描
-        const subFolderData = getFolderData(subHandle, subPath);
-        await scanDirectory(subFolderData);
+        // 更新树结构（添加到 UI）
+        subFolderData.parent.treeNode.addChild(subFolderData.treeNode);
 
-        updateTreeWithSubFolder(parentPath, subHandle.name, subPath);
-        // Yield to UI
-        await new Promise(r => setTimeout(r, 0));
-        await startBackgroundScan(subHandle, subPath);
+
+        // 递归处理子文件夹的子文件夹
+        await startBackgroundScan(subFolderData);
     }
 }
 
-async function handleFolderClick(path, li) {
-    if (!path || !li) return;
+async function handleFolderClick(li) {
+    if (!li) return;
 
-    // 获取 Folder 对象
-    const folderData = domToFolderMap.get(li) || appState.foldersData.get(path);
+    // 从 DOM 元素获取 Folder 对象
+    const folderData = domToFolderMap.get(li);
     if (!folderData) {
         showToast("无法找到文件夹数据", "error");
         return;
@@ -183,8 +118,8 @@ async function handleFolderClick(path, li) {
         }
 
         // 文件夹有效，正常加载
-        loadFolder(folderData);
         await refreshFolder(folderData, true);
+        await loadFolder(folderData);
 
     } catch (err) {
         console.error("文件夹点击处理失败:", err);
@@ -210,14 +145,17 @@ async function handleFolderClick(path, li) {
  * 
  * @param {SmartFolder} folderData - 文件夹对象
  */
-function loadFolder(folderData) {
+async function loadFolder(folderData) {
     appState.allPhotosMode = false;
     UI.refreshBtn.textContent = "刷新目录";
     UI.refreshBtn.title = "仅重新扫描当前文件夹的文件变动";
+    console.log(folderData);
 
-    const path = folderData.getPath();
-    appState.currentPath = path;
-    updateActiveTreeNode(path);
+    const path = folderData.path;
+    appState.currentFolder = folderData;
+
+    // setActive 会自动取消之前激活的节点
+    folderData.setActive();
     UI.pathDisplay.textContent = path;
 
     globals.currentDisplayList = folderData.files;
@@ -226,11 +164,13 @@ function loadFolder(folderData) {
 
 async function switchToAllPhotos() {
     appState.allPhotosMode = true;
-    appState.currentPath = "ALL_MEDIA";
+    appState.currentFolder = ALL_MEDIA_FOLDER;
     UI.refreshBtn.textContent = "重载项目";
     UI.refreshBtn.title = "重新扫描整个项目文件树";
     UI.pathDisplay.textContent = "所有媒体";
-    updateActiveTreeNode("ALL_MEDIA");
+
+    // setActive 会自动取消之前激活的节点
+    ALL_MEDIA_FOLDER.setActive();
 
     UI.gallery.innerHTML = '<div class="loader">正在聚合文件...</div>';
 
@@ -247,8 +187,6 @@ async function switchToAllPhotos() {
     // 将文件添加到 ALL_MEDIA_FOLDER
     ALL_MEDIA_FOLDER.files = allFiles;
 
-    // 将 ALL_MEDIA_FOLDER 添加到 foldersData
-    appState.foldersData.set('ALL_MEDIA', ALL_MEDIA_FOLDER);
 
     globals.currentDisplayList = allFiles;
     UI.pathDisplay.textContent = `所有媒体 (共 ${globals.currentDisplayList.length} 个)`;
@@ -267,11 +205,8 @@ async function handleRefreshAction() {
             reloadProject();
         }
     } else {
-        const currentFolder = appState.foldersData.get(appState.currentPath);
-        if (currentFolder) {
-            await refreshFolder(currentFolder);
-        } else if (appState.currentPath === 'ALL_MEDIA') {
-            await refreshFolder(ALL_MEDIA_FOLDER);
+        if (appState.currentFolder) {
+            await refreshFolder(appState.currentFolder);
         }
     }
 }
@@ -304,7 +239,7 @@ async function refreshFolder(folderData, silent = false) {
         return null;
     }
 
-    const folderPath = folderData.getPath ? folderData.getPath() : folderData.path;
+    const folderPath = folderData.path;
 
     try {
         if (!folderData.handle) {
@@ -312,34 +247,31 @@ async function refreshFolder(folderData, silent = false) {
             if (folderPath === appState.rootHandle.name) {
                 // 原地恢复 handle
                 folderData.handle = appState.rootHandle;
-                appState.dirMap.set(folderPath, appState.rootHandle);
             } else {
                 throw new Error("目录句柄丢失");
             }
         }
 
         // 深度复用扫描：直接原地更新 folderData
-        await scanDirectory(folderData);
+        await folderData.scan();
 
         // 更新侧边栏 UI
-        if (typeof updateFolderCount === 'function') {
-            updateFolderCount(folderPath); // 暂时保持使用 path
-        }
+        folderData.updateCount();
 
         // 重新同步子树结构（如果子文件夹有变）
-        await syncTreeStructure(folderPath, folderData.subFolders);
+        await syncTreeStructure(folderData);
 
         if (!silent) showToast("目录已刷新");
 
         return folderData;
     } catch (e) {
         if (e.name === 'NotFoundError' || (e.message && e.message.includes('not found'))) {
-            const isCurrent = (folderPath === appState.currentPath);
+            const isCurrent = (folderData === appState.currentFolder);
             if (isCurrent) {
                 showToast(`文件夹 "${folderPath}" 已被删除`, "error");
                 UI.gallery.innerHTML = '<div class="empty-state">文件夹已失效</div>';
             }
-            removeTreeNode(folderPath);
+            folderData.removeDOMNodes();
             appState.foldersData.delete(folderPath);
         } else {
             console.error("刷新失败", e);
@@ -362,16 +294,13 @@ async function reloadProject() {
         UI.treeRoot.innerHTML = '';
         UI.gallery.innerHTML = '<div class="loader">正在重新扫描...</div>';
         appState.foldersData.clear();
-        appState.dirMap.clear();
 
-        // 创建根 Folder 对象并扫描
-        const rootData = getFolderData(handle, handle.name);
-        await scanDirectory(rootData);
+        // 创建根 Folder 对象（自动扫描）
+        const rootData = await getFolderData(handle);
 
-        createRootNode(rootData);
-        const reloadedRoot = appState.foldersData.get(handle.name);
-        if (reloadedRoot) loadFolder(reloadedRoot);
-        startBackgroundScan(handle, handle.name);
+        rootData.treeNode.createRoot().appendTo(UI.treeRoot);
+        await loadFolder(rootData);
+        startBackgroundScan(rootData);
         showToast("项目已重新加载");
     } catch (err) {
         console.error(err);
@@ -379,52 +308,42 @@ async function reloadProject() {
     }
 }
 
-async function handleDropOnFolder(e, targetDirHandle, targetPath, liElement) {
+async function handleDropOnFolder(e, targetFolder, liElement) {
     e.preventDefault();
     liElement.classList.remove('drag-over');
 
     const data = JSON.parse(e.dataTransfer.getData('application/json'));
-    if (!data || !data.sourceDir) return;
-    if (data.sourceDir === targetPath) return;
+    if (!data || !data.name) return;
+
+    // 使用当前文件夹作为源文件夹（文件一定来自当前显示的文件夹）
+    const sourceFolder = appState.currentFolder;
+    if (!sourceFolder) {
+        showToast("无法确定源文件夹", "error");
+        return;
+    }
+
+    // 检查是否拖到同一个文件夹
+    if (sourceFolder === targetFolder) return;
 
     try {
-        const sourceCache = appState.foldersData.get(data.sourceDir);
-        const sourceFile = sourceCache.files.find(f => f.name === data.name);
+        const sourceFile = sourceFolder.files.find(f => f.name === data.name);
         if (!sourceFile) throw new Error("源文件丢失");
-
-        // 获取目标文件夹对象
-        const targetFolder = appState.foldersData.get(targetPath);
-        if (!targetFolder) throw new Error("目标文件夹未找到");
 
         // 使用操作历史系统执行移动
         await moveFileWithHistory(sourceFile, targetFolder);
 
-        showToast(`已移动: ${data.name} (Ctrl+Z 撤销)`, "success");
+        showToast(`已移动: ${data.name}（Ctrl+Z 撤销）`, "success");
 
-        // 刷新目标目录 (如果已扫描)
-        const targetFolderData = appState.foldersData.get(targetPath);
-        if (targetFolderData && targetFolderData.scanned) {
-            await refreshFolder(targetFolderData, true);
-        }
+        // 刷新目标目录
+        await refreshFolder(targetFolder, true);
 
         // 刷新源目录和 UI
-        if (appState.currentPath === 'ALL_MEDIA') {
+        if (appState.allPhotosMode) {
             // ALL_MEDIA 模式: 文件还在列表中,不需要刷新
-        } else if (appState.currentPath === data.sourceDir) {
-            // 当前在源目录: 刷新数据并更新 UI
-            const sourceFolder = appState.foldersData.get(data.sourceDir);
-            if (sourceFolder) {
-                const sourceFolderData = await refreshFolder(sourceFolder, true);
-                if (sourceFolderData) {
-                    loadFolder(sourceFolderData);
-                }
-            }
         } else {
-            // 不在源目录: 只刷新数据
-            const sourceFolder = appState.foldersData.get(data.sourceDir);
-            if (sourceFolder) {
-                await refreshFolder(sourceFolder, true);
-            }
+            // 当前在源目录: 刷新数据并更新 UI
+            await refreshFolder(sourceFolder, true);
+            await loadFolder(sourceFolder);
         }
 
     } catch (err) {
@@ -456,8 +375,8 @@ async function forceRegenerateCurrentThumbnails() {
 }
 
 async function moveFileToTrash(fileData) {
-    // 使用 getPath() 方法获取文件的完整路径
-    const fullPath = fileData.getPath();
+    // 使用 path getter 获取文件的完整路径
+    const fullPath = fileData.path;
     const pathParts = fullPath.split('/');
     const rootName = appState.rootHandle.name;
 
@@ -516,7 +435,7 @@ async function moveFileToTrash(fileData) {
 
     // 6. 返回删除信息用于撤销
     return {
-        parentPath: parentCache.getPath(),
+        parentPath: parentCache.path,
         originalName: fileName,
         trashName: targetName,
         trashDirHandle: currentDirHandle,

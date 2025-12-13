@@ -2,7 +2,7 @@
 function setupEventListeners() {
     document.querySelector('.intro-content').addEventListener('click', openFolderPicker);
     UI.pinBtn.addEventListener('click', () => toggleSidebarPin());
-    UI.allPhotosNode.addEventListener('click', () => switchToAllPhotos());
+
 
     UI.searchInput.addEventListener('input', debounce(() => {
         renderGalleryFromCache();
@@ -250,7 +250,7 @@ function enableInlineRename(card, fileData) {
             // 更新 DOM 显示
             nameEl.textContent = newName;
 
-            showToast("重命名成功 (Ctrl+Z 撤销)");
+            showToast("重命名成功（Ctrl+Z 撤销）");
             cleanup();
         } catch (e) {
             showToast("重命名失败: " + e.message, "error");
@@ -282,23 +282,27 @@ function enableInlineRename(card, fileData) {
 async function handleUndo() {
     try {
         // 使用操作历史系统撤销
-        const description = await undoLastOperation();
-        showToast(`已撤销: ${description}`, "success");
+        const operation = await undoLastOperation();
+        const description = operation.getDescription();
+        showToast(`已撤销  ${description}`, "success");
 
         // 静默刷新当前显示(不显示刷新 Toast)
-        if (appState.currentPath) {
-            const currentFolder = appState.foldersData.get(appState.currentPath);
-            if (currentFolder) {
-                const folderData = await refreshFolder(currentFolder, true);
-                if (folderData) {
-                    // 手动更新 UI
-                    if (appState.currentPath === 'ALL_MEDIA') {
-                        // ALL_MEDIA 已经在 switchToAllPhotos 中更新了
-                    } else {
-                        loadFolder(folderData);
-                    }
+        if (appState.currentFolder) {
+            const folderData = await refreshFolder(appState.currentFolder, true);
+            if (folderData) {
+                // 手动更新 UI
+                if (appState.allPhotosMode) {
+                    // ALL_MEDIA 已经在 switchToAllPhotos 中更新了
+                } else {
+                    await loadFolder(folderData);
                 }
             }
+        }
+
+        // 如果是移动操作，更新目标文件夹计数
+        if (operation.type === OperationType.FILE_MOVE) {
+            operation.targetFolder.updateCount();
+            operation.sourceFolder.updateCount();
         }
     } catch (e) {
         console.error(e);

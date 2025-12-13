@@ -10,9 +10,6 @@ const OperationType = {
     FILE_DELETE: 'file_delete',
     FILE_RENAME: 'file_rename',
     FILE_MOVE: 'file_move',
-    FOLDER_DELETE: 'folder_delete',
-    FOLDER_RENAME: 'folder_rename',
-    FOLDER_MOVE: 'folder_move'
 };
 
 /**
@@ -57,12 +54,19 @@ class FileDeleteOperation extends Operation {
     constructor(fileData) {
         super(OperationType.FILE_DELETE, fileData);
         this.fileData = fileData;
-        this.deleteInfo = null;
+
+        // 保存必要信息
+        this.parentFolder = fileData.parent;
+        this.originalName = fileData.name;
+        this.trashPath = null;  // 删除后在回收站中的完整路径
     }
 
-    async execute() {
-        const fileData = this.fileData;
-        const fullPath = fileData.getPath();
+    /**
+     * 获取文件在回收站中的相对路径
+     * @returns {string} 相对路径（不含根目录名）
+     */
+    _getRelativePath() {
+        const fullPath = this.fileData.path;
         const pathParts = fullPath.split('/');
         const rootName = appState.rootHandle.name;
 
@@ -71,34 +75,48 @@ class FileDeleteOperation extends Operation {
             pathParts.shift();
         }
 
-        const fileName = pathParts.pop();
-        const relativeDirPath = pathParts.join('/');
+        pathParts.pop(); // 移除文件名
+        return pathParts.join('/');
+    }
 
-        if (!fileData.parent || !fileData.parent.handle) {
-            throw new Error("无法定位父文件夹句柄");
-        }
-
-        // 创建 .trash 目录结构
+    /**
+     * 创建回收站目录结构
+     * @returns {Promise<FileSystemDirectoryHandle>} 目标目录句柄
+     */
+    async _createTrashDirectory() {
         const rootTrashHandle = await appState.rootHandle.getDirectoryHandle('.trash', { create: true });
+        const relativePath = this._getRelativePath();
+
+        if (!relativePath) {
+            return rootTrashHandle;
+        }
 
         let currentDirHandle = rootTrashHandle;
-        if (relativeDirPath) {
-            const dirs = relativeDirPath.split('/');
-            for (const dir of dirs) {
-                currentDirHandle = await currentDirHandle.getDirectoryHandle(dir, { create: true });
-            }
+        const dirs = relativePath.split('/');
+        for (const dir of dirs) {
+            currentDirHandle = await currentDirHandle.getDirectoryHandle(dir, { create: true });
         }
 
-        // 计算目标文件名(防重名)
+        return currentDirHandle;
+    }
+
+    /**
+     * 生成唯一的回收站文件名（防重名）
+     * @param {FileSystemDirectoryHandle} trashDirHandle - 回收站目录句柄
+     * @returns {Promise<string>} 唯一的文件名
+     */
+    async _generateUniqueTrashName(trashDirHandle) {
+        const fileName = this.originalName;
         const dotIdx = fileName.lastIndexOf('.');
         const baseName = dotIdx !== -1 ? fileName.substring(0, dotIdx) : fileName;
         const ext = dotIdx !== -1 ? fileName.substring(dotIdx) : '';
 
         let targetName = fileName;
         let counter = 1;
+
         while (true) {
             try {
-                await currentDirHandle.getFileHandle(targetName);
+                await trashDirHandle.getFileHandle(targetName);
                 targetName = `${baseName}_${counter}${ext}`;
                 counter++;
             } catch (e) {
@@ -107,61 +125,76 @@ class FileDeleteOperation extends Operation {
             }
         }
 
-        // 移动文件到 .trash
-        await fileData.handle.move(currentDirHandle, targetName);
+        return targetName;
+    }
 
-        // 更新内存数据
-        fileData.parent.removeFile(fileData);
-
-        const listIdx = globals.currentDisplayList.indexOf(fileData);
+    /**
+     * 从显示列表中移除文件
+     */
+    _removeFromDisplayList() {
+        const listIdx = globals.currentDisplayList.indexOf(this.fileData);
         if (listIdx > -1) {
             globals.currentDisplayList.splice(listIdx, 1);
         }
+    }
 
-        // 保存删除信息
-        this.deleteInfo = {
-            parentPath: fileData.parent.getPath(),
-            parentHandle: fileData.parent.handle,
-            originalName: fileName,
-            trashName: targetName,
-            trashDirHandle: currentDirHandle,
-            relativeDirPath,
-            fileData: fileData
-        };
+    async execute() {
+        if (!this.parentFolder || !this.parentFolder.handle) {
+            throw new Error("无法定位父文件夹");
+        }
 
-        return this.deleteInfo;
+        // 创建回收站目录结构
+        const trashDirHandle = await this._createTrashDirectory();
+
+        // 生成唯一文件名
+        const trashName = await this._generateUniqueTrashName(trashDirHandle);
+
+        // 移动文件到回收站
+        await this.fileData.handle.move(trashDirHandle, trashName);
+
+        // 保存回收站路径
+        const relativePath = this._getRelativePath();
+        this.trashPath = relativePath ? `${relativePath}/${trashName}` : trashName;
+
+        // 更新内存数据
+        this.parentFolder.removeFile(this.fileData);
+        this._removeFromDisplayList();
     }
 
     async undo() {
-        if (!this.deleteInfo) {
-            throw new Error('没有删除信息,无法撤销');
+        if (!this.trashPath) {
+            throw new Error('没有删除信息，无法撤销');
         }
 
-        const { parentHandle, originalName, trashName, trashDirHandle, fileData } = this.deleteInfo;
+        // 解析回收站路径
+        const rootTrashHandle = await appState.rootHandle.getDirectoryHandle('.trash');
+        const pathParts = this.trashPath.split('/');
+        const trashName = pathParts.pop();
 
-        // 从 .trash 移回原位置
+        // 定位到回收站中的文件
+        let trashDirHandle = rootTrashHandle;
+        for (const dir of pathParts) {
+            trashDirHandle = await trashDirHandle.getDirectoryHandle(dir);
+        }
+
+        // 从回收站移回原位置
         const trashedFileHandle = await trashDirHandle.getFileHandle(trashName);
-        await trashedFileHandle.move(parentHandle, originalName);
+        await trashedFileHandle.move(this.parentFolder.handle, this.originalName);
 
-        // 重新获取文件句柄
-        const restoredHandle = await parentHandle.getFileHandle(originalName);
+        // 重新获取文件信息
+        const restoredHandle = await this.parentFolder.handle.getFileHandle(this.originalName);
         const restoredFile = await restoredHandle.getFile();
 
         // 更新 fileData
-        fileData.handle = restoredHandle;
-        fileData.file = restoredFile;
-        fileData.name = originalName;
+        this.fileData.handle = restoredHandle;
+        this.fileData.file = restoredFile;
 
         // 重新添加到父文件夹
-        if (fileData.parent) {
-            fileData.parent.addFile(fileData);
-        }
-
-        return originalName;
+        this.parentFolder.addFile(this.fileData);
     }
 
     getDescription() {
-        return `删除文件: ${this.fileData.name}`;
+        return `删除文件: ${this.originalName}`;
     }
 }
 
@@ -210,11 +243,10 @@ class FileMoveOperation extends Operation {
             throw new Error('文件缺少父文件夹引用');
         }
 
-        // 保存源文件夹路径
-        this.sourcePath = fileData.parent.getPath();
+        // 直接保存源文件夹对象引用
+        this.sourceFolder = fileData.parent;
 
-        // 保存目标文件夹路径和对象
-        this.targetPath = targetFolder.getPath();
+        // 保存目标文件夹对象
         this.targetFolder = targetFolder;
     }
 
@@ -223,14 +255,13 @@ class FileMoveOperation extends Operation {
     }
 
     async undo() {
-        // 从 appState.foldersData 获取源文件夹
-        const sourceFolder = appState.foldersData.get(this.sourcePath);
-        if (!sourceFolder) {
-            throw new Error(`源文件夹未找到: ${this.sourcePath}`);
+        // 直接使用保存的源文件夹对象
+        if (!this.sourceFolder) {
+            throw new Error('源文件夹引用丢失');
         }
 
         // 移回原文件夹
-        await this.fileData.move(sourceFolder);
+        await this.fileData.move(this.sourceFolder);
     }
 
     getDescription() {
@@ -261,6 +292,7 @@ class OperationHistory {
 
     /**
      * 撤销最后一个操作
+     * @returns {Promise<Operation>} 返回被撤销的操作对象
      */
     async undo() {
         if (this.history.length === 0) {
@@ -270,7 +302,7 @@ class OperationHistory {
         const operation = this.history.pop();
         await operation.undo();
 
-        return operation.getDescription();
+        return operation;
     }
 
     /**
@@ -333,8 +365,9 @@ async function moveFileWithHistory(fileData, targetFolder) {
 
 /**
  * 辅助函数: 撤销最后一个操作
+ * @returns {Promise<Operation>} 返回被撤销的操作对象
  */
 async function undoLastOperation() {
-    const description = await operationHistory.undo();
-    return description;
+    const operation = await operationHistory.undo();
+    return operation;
 }

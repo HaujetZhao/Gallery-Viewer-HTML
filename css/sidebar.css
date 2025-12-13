@@ -104,27 +104,27 @@
 }
 
 /* 侧边栏内容 */
-.special-folders,
-#treeContainer {
+#virtualContainer,
+#folderContainer {
     padding: 10px;
 }
 
-#treeContainer {
+#folderContainer {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
 }
 
-#treeContainer::-webkit-scrollbar {
+#folderContainer::-webkit-scrollbar {
     display: none;
 }
 
-#treeContainer ul,
-.special-folders ul {
+#folderContainer ul,
+.virtualContainer ul {
     list-style: none;
 }
 
-#treeContainer ul {
+#folderContainer ul {
     padding-left: 0;
     border-left: none;
 }
@@ -145,7 +145,6 @@
 .tree-node.root-node {
     font-weight: bold;
     color: #ecf0f1;
-    background-color: rgba(255, 255, 255, 0.05);
     margin-bottom: 5px;
 }
 

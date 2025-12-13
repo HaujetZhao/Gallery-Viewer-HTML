@@ -23,8 +23,15 @@ function debounce(func, wait) {
     };
 }
 
+
 function windowsCompareStrings(a, b) {
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    // 1. numeric: true  -> 开启数字感知排序（自然排序）。例如 'a10' 会排在 'a2' 后面。
+    // 2. sensitivity: 'base' -> 忽略大小写、重音和符号差异（如 'a' 和 'A' 视为相等）。
+    //    Windows 文件名通常是大小写不敏感的。
+    return a.localeCompare(b, 'zh-CN', {
+        numeric: true,
+        sensitivity: 'base'
+    });
 }
 
 function getMimeType(filename) {

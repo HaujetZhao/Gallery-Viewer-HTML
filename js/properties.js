@@ -83,7 +83,7 @@ function renderProperties(fileData, metadata, fileExt) {
                 <td><i class="fas fa-file"></i> 文件名</td>
                 <td class="editable-filename" style="cursor: pointer; color: #3498db;" title="点击编辑">${fileData.name}</td>
             </tr>
-            <tr><td><i class="fas fa-folder-open"></i> 路径</td><td style="word-break: break-all;">${fileData.path || fileData.webkitRelativePath || fileData.name}</td></tr>
+            <tr><td><i class="fas fa-folder-open"></i> 路径</td><td class="file-path-display" style="word-break: break-all;">${fileData.path}</td></tr>
             ${dimensionText ? `<tr><td><i class="fas fa-expand"></i> 分辨率</td><td>${dimensionText}</td></tr>` : ''}
             ${durationRow}
             <tr><td><i class="fas fa-database"></i> 大小</td><td>${formatBytes(fileData.size)}</td></tr>
@@ -399,8 +399,8 @@ function enablePropertiesRename(cell, fileData) {
             return;
         }
         try {
-            // 使用 SmartFile 的 rename 方法（会自动更新 name 和 path）
-            await fileData.rename(newName);
+            // 使用操作历史系统执行重命名（支持撤销）
+            await renameFileWithHistory(fileData, newName);
 
             // 更新卡片显示
             if (fileData.dom) {
@@ -408,8 +408,16 @@ function enablePropertiesRename(cell, fileData) {
                 if (cardNameEl) cardNameEl.textContent = newName;
             }
 
+            // 更新属性面板中的文件名
             cell.textContent = newName;
-            showToast("重命名成功");
+
+            // 更新属性面板中的路径（因为 path 是 getter，会自动更新）
+            const pathCell = document.querySelector('.file-path-display');
+            if (pathCell) {
+                pathCell.textContent = fileData.path;
+            }
+
+            showToast("重命名成功（Ctrl+Z 撤销）");
         } catch (e) {
             showToast("重命名失败: " + e.message, "error");
             cell.textContent = originalText;
