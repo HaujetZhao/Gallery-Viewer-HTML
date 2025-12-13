@@ -2,6 +2,7 @@
 .gallery-container {
     min-height: 400px;
     position: relative;
+    flex: 1;
 }
 
 .empty-state {
