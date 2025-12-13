@@ -154,6 +154,19 @@ class SmartFolder {
     }
 
     /**
+     * 添加文件并排序
+     * @param {SmartFile} file - 文件对象
+     */
+    addFileAndSort(file) {
+        if (!this.files.includes(file)) {
+            this.files.push(file);
+            file.parent = this;
+            // 重新排序
+            this.files.sort((a, b) => windowsCompareStrings(a.name, b.name));
+        }
+    }
+
+    /**
      * 移除文件
      * @param {SmartFile} file - 文件对象
      */
@@ -215,131 +228,118 @@ class SmartFolder {
         }
 
         const dirHandle = this.handle;
+        const start = performance.now();
 
-        // ========== 第一步：验证现有文件的 handle 可用性 ==========
+        // 创建现有文件和文件夹的映射表
+        const existingFilesMap = new Map(this.files.map(f => [f.name, f]));
+        const existingFoldersMap = new Map(this.subFolders.map(f => [f.name, f]));
+
         const filesToKeep = [];
-        const filesToRemove = [];
+        const foldersToKeep = [];
+        const newFiles = [];
+        const newSubFolders = [];
 
-        for (const fileObj of this.files) {
-            try {
-                // 尝试使用 handle 获取文件
-                const file = await fileObj.handle.getFile();
+        // ========== 只遍历一次文件夹 ==========
+        const scanStart = performance.now();
+        for await (const entry of dirHandle.values()) {
+            if (entry.kind === 'file') {
+                const ext = entry.name.split('.').pop().toLowerCase();
+                if (!FileTypes.allMedia.includes(ext)) continue;
 
-                // handle 可用，检查文件是否有变化
-                if (fileObj.size !== file.size || fileObj.lastModified !== file.lastModified) {
-                    // 文件内容已改变，刷新
-                    await fileObj.refresh();
+                const existingFile = existingFilesMap.get(entry.name);
+                if (existingFile) {
+                    // 文件已存在，验证并更新
+                    try {
+                        const file = await entry.getFile();
+
+                        // 检查文件是否有变化
+                        if (existingFile.size !== file.size || existingFile.lastModified !== file.lastModified) {
+                            await existingFile.refresh();
+                        }
+
+                        filesToKeep.push(existingFile);
+                        existingFilesMap.delete(entry.name); // 标记为已处理
+                    } catch (e) {
+                        console.log(`文件 ${entry.name} 的 handle 已失效，将被移除`);
+                        // 不添加到 filesToKeep，相当于删除
+                    }
+                } else {
+                    // 新文件
+                    try {
+                        const file = await entry.getFile();
+                        const fileObj = new SmartFile({
+                            handle: entry,
+                            file: file,
+                            parent: this
+                        });
+
+                        filesToKeep.push(fileObj);
+                        newFiles.push(fileObj);
+                    } catch (e) {
+                        console.warn("无法读取文件:", entry.name, e);
+                    }
                 }
+            } else if (entry.kind === 'directory') {
+                if (entry.name.startsWith('.')) continue;
 
-                filesToKeep.push(fileObj);
+                const existingFolder = existingFoldersMap.get(entry.name);
+                if (existingFolder) {
+                    // 文件夹已存在，直接保留（能在遍历中找到就说明存在）
+                    foldersToKeep.push(existingFolder);
+                    existingFoldersMap.delete(entry.name); // 标记为已处理
+                } else {
+                    // 新文件夹
+                    const subFolderData = new SmartFolder({
+                        handle: entry,
+                        parent: this
+                    });
 
-            } catch (e) {
-                // handle 不可用（文件被删除、重命名或移动）
-                console.log(`文件 ${fileObj.name} 的 handle 已失效，将被移除`);
-                filesToRemove.push(fileObj);
+                    // 注册到全局状态
+                    const subPath = this.path + '/' + entry.name;
+                    appState.foldersData.set(subPath, subFolderData);
+
+                    foldersToKeep.push(subFolderData);
+                    newSubFolders.push(subFolderData);
+                }
             }
         }
+        console.log(`单次扫描耗时：${performance.now() - scanStart} ms`);
 
-        // 清理被移除的文件
-        for (const fileObj of filesToRemove) {
+        // ========== 清理已删除的文件和文件夹 ==========
+        const cleanupStart = performance.now();
+
+        // 剩余在 Map 中的就是已被删除的
+        for (const fileObj of existingFilesMap.values()) {
             fileObj.dispose();
         }
 
-        // ========== 第二步：验证现有子文件夹的 handle 可用性 ==========
-        const foldersToKeep = [];
-        const foldersToRemove = [];
-
-        for (const folderObj of this.subFolders) {
-            try {
-                // 尝试使用 handle 列出内容（验证可用性）
-                const iterator = folderObj.handle.values();
-                await iterator.next();  // 只取第一个元素测试
-
-                // handle 可用，保留
-                foldersToKeep.push(folderObj);
-
-            } catch (e) {
-                // handle 不可用（文件夹被删除、重命名或移动）
-                console.log(`文件夹 ${folderObj.name} 的 handle 已失效，将被移除`);
-                foldersToRemove.push(folderObj);
-            }
-        }
-
-        // 清理被移除的文件夹
-        for (const folderObj of foldersToRemove) {
+        for (const folderObj of existingFoldersMap.values()) {
             const deletedPath = folderObj.path;
             appState.foldersData.delete(deletedPath);
             folderObj.removeDOMNodes();
         }
 
-        // ========== 第三步：扫描新增文件 ==========
-        const existingFileNames = new Set(filesToKeep.map(f => f.name));
-        const newFiles = [];  // 记录新增的文件
+        console.log(`清理耗时：${performance.now() - cleanupStart} ms`);
 
-        for await (const entry of dirHandle.values()) {
-            if (entry.kind !== 'file') continue;
-            const ext = entry.name.split('.').pop().toLowerCase();
-            if (!FileTypes.allMedia.includes(ext)) continue;
-
-            // 跳过已存在的文件
-            if (existingFileNames.has(entry.name)) continue;
-
-            try {
-                const file = await entry.getFile();
-                const fileObj = new SmartFile({
-                    handle: entry,
-                    file: file,
-                    parent: this
-                });
-
-                filesToKeep.push(fileObj);
-                newFiles.push(fileObj);  // 记录为新增
-
-            } catch (e) {
-                console.warn("无法读取文件:", entry.name, e);
-            }
-        }
-
-        // ========== 第四步：扫描新增子文件夹 ==========
-        const existingFolderNames = new Set(foldersToKeep.map(f => f.name));
-        const newSubFolders = [];  // 记录新增的子文件夹
-
-        for await (const entry of dirHandle.values()) {
-            if (entry.kind !== 'directory') continue;
-            if (entry.name.startsWith('.')) continue;
-
-            // 跳过已存在的文件夹
-            if (existingFolderNames.has(entry.name)) continue;
-
-            // 新的子文件夹，只创建对象，不扫描
-            const subFolderData = new SmartFolder({
-                handle: entry,
-                parent: this
-            });
-
-            // 注册到全局状态
-            const subPath = this.path + '/' + entry.name;
-            appState.foldersData.set(subPath, subFolderData);
-
-            foldersToKeep.push(subFolderData);
-            newSubFolders.push(subFolderData);  // 记录为新增
-        }
-
-        // ========== 第五步：排序并更新 ==========
+        // ========== 排序并更新 ==========
+        const sortStart = performance.now();
         filesToKeep.sort((a, b) => windowsCompareStrings(a.name, b.name));
         foldersToKeep.sort((a, b) => windowsCompareStrings(a.name, b.name));
+        console.log(`排序耗时：${performance.now() - sortStart} ms`);
 
         this.files = filesToKeep;
         this.subFolders = foldersToKeep;
         this.scanned = true;
+
+        console.log(`总耗时：${performance.now() - start} ms`);
 
         // 返回扫描结果
         return {
             folder: this,
             newFiles,
             newSubFolders,
-            removedFileCount: filesToRemove.length,
-            removedFolderCount: foldersToRemove.length
+            removedFileCount: existingFilesMap.size,
+            removedFolderCount: existingFoldersMap.size
         };
     }
 

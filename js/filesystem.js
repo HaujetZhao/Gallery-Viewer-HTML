@@ -138,8 +138,12 @@ async function handleFolderClick(li) {
             return;
         }
 
-        // 文件夹有效，正常加载
-        await refreshFolder(folderData, true);
+        // 只对小文件夹（<200 文件）进行即时扫描
+        const shouldScan = folderData.files.length < 200;
+        if (shouldScan) {
+            await refreshFolder(folderData, true);
+        }
+
         await loadFolder(folderData);
 
     } catch (err) {
@@ -330,15 +334,17 @@ async function handleDropOnFolder(e, targetFolder, liElement) {
 
         showToast(`已移动: ${data.name}（Ctrl+Z 撤销）`, "success");
 
-        // 刷新目标目录
-        await refreshFolder(targetFolder, true);
+        // 更新目标文件夹的文件列表和计数
+        targetFolder.addFileAndSort(sourceFile);
+        targetFolder.updateCount();
 
-        // 刷新源目录和 UI
+        // 更新源文件夹的文件列表和 UI
         if (appState.allPhotosMode) {
             // ALL_MEDIA 模式: 文件还在列表中,不需要刷新
         } else {
-            // 当前在源目录: 刷新数据并更新 UI
-            await refreshFolder(sourceFolder, true);
+            // 当前在源目录: 从源文件夹移除文件并更新 UI
+            sourceFolder.removeFile(sourceFile);
+            sourceFolder.updateCount();
             await loadFolder(sourceFolder);
         }
 

@@ -222,10 +222,8 @@ async function handleFileDelete(fileData) {
             fileData.dom.remove();
         }
 
+        // 重新渲染 gallery 以确保 DOM 正确排序
         if (appState.currentFolder) {
-            await refreshFolder(appState.currentFolder, true);
-
-            // 重新渲染 gallery 以确保 DOM 正确排序
             renderGallery(globals.currentDisplayList);
         }
 

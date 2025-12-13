@@ -9,15 +9,6 @@ function createFolderContextMenu() {
     menu.id = 'folder-context-menu';
     menu.className = 'context-menu hidden';
     menu.innerHTML = `
-        <div class="context-menu-item" data-action="new-folder">
-            <i class="fas fa-folder-plus"></i>
-            <span>新建文件夹</span>
-        </div>
-        <div class="context-menu-item" data-action="rename">
-            <i class="fas fa-edit"></i>
-            <span>重命名</span>
-        </div>
-        <div class="context-menu-divider"></div>
         <div class="context-menu-item danger" data-action="delete">
             <i class="fas fa-trash-alt"></i>
             <span>删除文件夹</span>
@@ -47,12 +38,6 @@ function initFolderContextMenu() {
         hideFolderContextMenu();
 
         switch (action) {
-            case 'new-folder':
-                await handleNewFolder(currentContextFolder);
-                break;
-            case 'rename':
-                await handleRenameFolder(currentContextFolder);
-                break;
             case 'delete':
                 await handleDeleteFolder(currentContextFolder);
                 break;
@@ -166,102 +151,7 @@ function hideFolderContextMenu() {
     }
 }
 
-/**
- * 处理新建文件夹
- */
-async function handleNewFolder(parentFolder) {
-    const folderName = prompt('请输入文件夹名称:');
-    if (!folderName || !folderName.trim()) return;
 
-    const trimmedName = folderName.trim();
-
-    // 验证文件夹名称
-    if (/[<>:"/\\|?*]/.test(trimmedName)) {
-        showToast('文件夹名称包含非法字符', 'error');
-        return;
-    }
-
-    try {
-        // 使用 File System Access API 创建文件夹
-        const newFolderHandle = await parentFolder.handle.getDirectoryHandle(trimmedName, { create: true });
-
-        // 刷新父文件夹
-        await refreshFolder(parentFolder);
-
-        showToast(`文件夹 "${trimmedName}" 创建成功`, 'success');
-    } catch (err) {
-        console.error('创建文件夹失败:', err);
-        if (err.name === 'NotAllowedError') {
-            showToast('没有权限创建文件夹', 'error');
-        } else if (err.message?.includes('already exists')) {
-            showToast('文件夹已存在', 'error');
-        } else {
-            showToast('创建文件夹失败: ' + err.message, 'error');
-        }
-    }
-}
-
-/**
- * 处理重命名文件夹
- */
-async function handleRenameFolder(folderData) {
-    const oldName = folderData.name;
-    const newName = prompt('请输入新的文件夹名称:', oldName);
-
-    if (!newName || !newName.trim() || newName.trim() === oldName) return;
-
-    const trimmedName = newName.trim();
-
-    // 验证文件夹名称
-    if (/[<>:"/\\|?*]/.test(trimmedName)) {
-        showToast('文件夹名称包含非法字符', 'error');
-        return;
-    }
-
-    try {
-        const parentFolder = folderData.parent;
-        if (!parentFolder) {
-            showToast('无法重命名根文件夹', 'error');
-            return;
-        }
-
-        // 使用 move API 重命名
-        await folderData.handle.move(parentFolder.handle, trimmedName);
-
-        // 更新文件夹数据
-        const oldPath = folderData.path;
-        const newPath = parentFolder.path + '/' + trimmedName;
-
-        // 从 Map 中移除旧路径
-        appState.foldersData.delete(oldPath);
-
-        // 更新文件夹对象
-        folderData.name = trimmedName;
-
-        // 添加新路径到 Map
-        appState.foldersData.set(newPath, folderData);
-
-        // 更新 DOM
-        if (folderData.treeNode) {
-            const nameSpan = folderData.treeNode.querySelector('i').nextSibling;
-            if (nameSpan) {
-                nameSpan.textContent = ' ' + trimmedName + ' ';
-            }
-        }
-
-        // 刷新父文件夹
-        await refreshFolder(parentFolder);
-
-        showToast(`文件夹已重命名为 "${trimmedName}"`, 'success');
-    } catch (err) {
-        console.error('重命名文件夹失败:', err);
-        if (err.name === 'NotAllowedError') {
-            showToast('没有权限重命名文件夹', 'error');
-        } else {
-            showToast('重命名失败: ' + err.message, 'error');
-        }
-    }
-}
 
 /**
  * 处理删除文件夹
@@ -284,8 +174,8 @@ async function handleDeleteFolder(folderData) {
             return;
         }
 
-        // 删除文件夹
-        await parentFolder.handle.removeEntry(folderName, { recursive: true });
+        // 删除文件夹（会自动从父文件夹的 subFolders 数组中移除）
+        await folderData.delete();
 
         // 从 Map 中移除
         const path = folderData.path;
@@ -296,12 +186,13 @@ async function handleDeleteFolder(folderData) {
             folderData.removeDOMNodes();
         }
 
-        // 刷新父文件夹
-        await refreshFolder(parentFolder);
+        // 更新父文件夹的计数和图标状态
+        parentFolder.updateCount();
+        parentFolder.updateIconState();
 
         // 如果当前显示的是被删除的文件夹,切换到父文件夹
         if (appState.currentFolderPath === path) {
-            handleFolderClick(parentFolder.path);
+            handleFolderClick(parentFolder.treeNodeElement);
         }
 
         showToast(`文件夹 "${folderName}" 已删除`, 'success');
