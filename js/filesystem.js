@@ -1,7 +1,3 @@
-
-
-
-
 async function openFolderPicker() {
     try {
         const handle = await showDirectoryPicker({
@@ -40,9 +36,28 @@ async function loadProject() {
 }
 
 
+async function reloadProject() {
+    if (!appState.rootHandle) {
+        showToast("未打开任何文件夹", "error");
+        return;
+    }
+    try {
+        showToast("正在重新扫描...", "warning");
 
+        // 清理状态和 UI
+        UI.treeRoot.innerHTML = '';
+        UI.gallery.innerHTML = '<div class="loader">正在重新扫描...</div>';
+        appState.foldersData.clear();
 
-
+        // 载入项目，切换到根目录
+        const rootData = await loadProject();
+        await loadFolder(rootData);
+        showToast("项目已重新加载");
+    } catch (err) {
+        console.error(err);
+        showToast("重载失败: " + err.message, "error");
+    }
+}
 
 async function getFolderData(dirHandle) {
     const parts = await appState.rootHandle.resolve(dirHandle);
@@ -108,6 +123,12 @@ async function handleFolderClick(li) {
     }
 
     try {
+        // 虚拟文件夹（如 ALL_MEDIA_FOLDER）不需要验证和刷新
+        if (folderData === ALL_MEDIA_FOLDER) {
+            await loadFolder(folderData);
+            return;
+        }
+
         // 先验证文件夹是否可用
         const isValid = await folderData.validate();
 
@@ -146,6 +167,12 @@ async function handleFolderClick(li) {
  * @param {SmartFolder} folderData - 文件夹对象
  */
 async function loadFolder(folderData) {
+    // 处理虚拟文件夹（如 ALL_MEDIA_FOLDER）
+    if (folderData === ALL_MEDIA_FOLDER) {
+        await switchToAllPhotos();
+        return;
+    }
+
     appState.allPhotosMode = false;
     UI.refreshBtn.textContent = "刷新目录";
     UI.refreshBtn.title = "仅重新扫描当前文件夹的文件变动";
@@ -183,13 +210,8 @@ async function switchToAllPhotos() {
             allFiles = allFiles.concat(data.files);
         }
     }
-
-    // 将文件添加到 ALL_MEDIA_FOLDER
     ALL_MEDIA_FOLDER.files = allFiles;
-
-
     globals.currentDisplayList = allFiles;
-    UI.pathDisplay.textContent = `所有媒体 (共 ${globals.currentDisplayList.length} 个)`;
 
     if (allFiles.length === 0) {
         UI.gallery.innerHTML = '<div class="empty-state">暂无媒体文件 (后台扫描可能仍在进行，请稍候刷新)</div>';
@@ -201,7 +223,7 @@ async function switchToAllPhotos() {
 
 async function handleRefreshAction() {
     if (appState.allPhotosMode) {
-        if (confirm("在【所有图片】模式下，刷新将重载整个项目并重新扫描所有文件。是否继续？")) {
+        if (confirm("在【所有媒体】模式下，刷新将重载整个项目并重新扫描所有文件。是否继续？")) {
             reloadProject();
         }
     } else {
@@ -281,32 +303,6 @@ async function refreshFolder(folderData, silent = false) {
     }
 }
 
-
-
-async function reloadProject() {
-    if (!appState.rootHandle) {
-        showToast("未打开任何文件夹", "error");
-        return;
-    }
-    try {
-        const handle = appState.rootHandle;
-        showToast("正在重新扫描...", "warning");
-        UI.treeRoot.innerHTML = '';
-        UI.gallery.innerHTML = '<div class="loader">正在重新扫描...</div>';
-        appState.foldersData.clear();
-
-        // 创建根 Folder 对象（自动扫描）
-        const rootData = await getFolderData(handle);
-
-        rootData.treeNode.createRoot().appendTo(UI.treeRoot);
-        await loadFolder(rootData);
-        startBackgroundScan(rootData);
-        showToast("项目已重新加载");
-    } catch (err) {
-        console.error(err);
-        showToast("重载失败: " + err.message, "error");
-    }
-}
 
 async function handleDropOnFolder(e, targetFolder, liElement) {
     e.preventDefault();

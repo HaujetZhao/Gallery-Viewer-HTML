@@ -52,28 +52,8 @@ function setupCSSBasedResizer() {
 
 function setupSidebarEvents() {
 
-    // 虚拟文件夹的点击事件（如 ALL_MEDIA_FOLDER）
-    UI.virtualTreeRoot.addEventListener('click', (e) => {
-        const li = e.target.closest('li.tree-node');
-        if (!li) return;
-
-        e.stopPropagation();
-
-        // 关闭右键菜单
-        contextMenuManager.hideAll();
-
-        // 使用 WeakMap 获取 Folder 对象
-        const folderData = domToFolderMap.get(li);
-        if (!folderData) return;
-
-        // 处理虚拟文件夹
-        if (folderData === ALL_MEDIA_FOLDER) {
-            switchToAllPhotos();
-        }
-    });
-
-    // 普通文件夹的点击事件
-    UI.treeRoot.addEventListener('click', (e) => {
+    // 统一的文件夹点击事件（包括虚拟文件夹和普通文件夹）
+    const handleTreeClick = (e) => {
         const li = e.target.closest('li.tree-node');
         if (!li) return;
 
@@ -91,10 +71,14 @@ function setupSidebarEvents() {
 
         handleFolderClick(li);
 
+        // 虚拟文件夹没有展开/折叠功能
         if (isIconClick && folderData.treeList) {
             folderData.toggleExpanded();
         }
-    });
+    };
+
+    UI.virtualTreeRoot.addEventListener('click', handleTreeClick);
+    UI.treeRoot.addEventListener('click', handleTreeClick);
 
     UI.treeRoot.addEventListener('dragover', (e) => {
         const li = e.target.closest('li.tree-node');
