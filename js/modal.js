@@ -286,7 +286,13 @@ class ImageModal {
      * 鼠标按下处理
      */
     handleMouseDown(e) {
-        if (!this.isOpen || e.button !== 0) return;
+        if (!this.isOpen) return;
+
+        // 右键点击：不阻止默认行为，允许显示右键菜单
+        if (e.button === 2) return;
+
+        // 左键点击：阻止默认行为并开始拖拽
+        if (e.button !== 0) return;
 
         e.preventDefault();
         this.panning = true;

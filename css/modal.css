@@ -40,7 +40,8 @@
 .modal-image {
     -webkit-user-drag: none;
     transition: filter 0.3s ease;
-    pointer-events: none;
+    /* 允许接收鼠标事件，包括右键菜单 */
+    pointer-events: auto;
 }
 
 /* SVG 容器样式 */
