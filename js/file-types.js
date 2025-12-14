@@ -7,7 +7,7 @@ const FileTypes = {
     // 图片格式
     image: {
         // 普通图片
-        standard: ['jpg', 'jpeg', 'png', 'webp', 'bmp'],
+        standard: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'jfif'],
         // GIF 动图
         gif: ['gif'],
         // SVG 矢量图
