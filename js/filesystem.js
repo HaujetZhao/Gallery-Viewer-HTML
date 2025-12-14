@@ -1,4 +1,10 @@
 async function openFolderPicker() {
+    // 检查浏览器是否支持 File System Access API
+    if (!isFileSystemAccessSupported()) {
+        showIncompatibilityAlert();
+        return;
+    }
+
     try {
         const handle = await showDirectoryPicker({
             mode: 'readwrite',

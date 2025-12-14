@@ -15,6 +15,9 @@ async function init() {
 
     const pinned = localStorage.getItem('sidebarPinned') === 'true';
     if (pinned) toggleSidebarPin(true);
+
+    // 检查浏览器兼容性
+    checkBrowserCompatibility();
 }
 
 // Global invocation
