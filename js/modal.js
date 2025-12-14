@@ -113,6 +113,9 @@ class ImageModal {
         // Ctrl 键状态 - 用于拖动模式
         this.isCtrlPressed = false;
 
+        // 视频悬停状态 - 用于键盘控制
+        this.isHoveringVideo = false;
+
         // 触摸缩放相关
         this.initialDistance = 0;
         this.initialScale = 1;
@@ -229,6 +232,18 @@ class ImageModal {
         // Ctrl 键监听 - 用于拖动模式
         window.addEventListener('keydown', this.handleKeyDown.bind(this));
         window.addEventListener('keyup', this.handleKeyUp.bind(this));
+
+        // 视频悬停监听 - 用于键盘控制
+        this.modal.addEventListener('mouseover', (e) => {
+            if (e.target.tagName === 'VIDEO') {
+                this.isHoveringVideo = true;
+            }
+        });
+        this.modal.addEventListener('mouseout', (e) => {
+            if (e.target.tagName === 'VIDEO') {
+                this.isHoveringVideo = false;
+            }
+        });
     }
 
     /**
@@ -559,6 +574,7 @@ class ImageModal {
         this.panning = false;
         this.currentIndex = -1;
         this.fileData = null;
+        this.isHoveringVideo = false; // 重置视频悬停状态
         globals.currentImageIndex = -1;
         this.modal.classList.add('hidden');
 
@@ -575,7 +591,8 @@ class ImageModal {
             currentIndex: this.currentIndex,
             scale: this.scale,
             pointX: this.pointX,
-            pointY: this.pointY
+            pointY: this.pointY,
+            isHoveringVideo: this.isHoveringVideo
         };
     }
 

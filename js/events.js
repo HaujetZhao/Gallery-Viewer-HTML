@@ -107,6 +107,34 @@ function handleKeyDown(e) {
     const modalState = getModalState();
 
     if (modalState.isOpen) {
+        // 如果鼠标悬停在视频上,提供视频控制功能
+        if (modalState.isHoveringVideo) {
+            const videoElement = document.querySelector('#modal video');
+            if (videoElement) {
+                // 左右箭头键控制视频进度
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    const skipTime = 5; // 前进/后退5秒
+                    if (e.key === 'ArrowRight') {
+                        videoElement.currentTime = Math.min(videoElement.currentTime + skipTime, videoElement.duration);
+                    } else if (e.key === 'ArrowLeft') {
+                        videoElement.currentTime = Math.max(videoElement.currentTime - skipTime, 0);
+                    }
+                    return;
+                }
+                // 空格键暂停/播放
+                else if (e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault();
+                    if (videoElement.paused) {
+                        videoElement.play();
+                    } else {
+                        videoElement.pause();
+                    }
+                    return;
+                }
+            }
+        }
+
         switch (e.key) {
             case 'Escape': closeModal(); break;
             case 'ArrowRight':

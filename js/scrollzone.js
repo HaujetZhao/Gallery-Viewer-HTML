@@ -126,11 +126,12 @@ function handleScrollZoneMouseLeave() {
 
 function isInExcludedZone(x, y) {
     const excludedElements = [
-        UI.settingBar,
-        document.getElementById('settingBtn'),
-        UI.filterCount?.parentElement,
-        document.getElementById('toastContainer'),
-        UI.modal
+        UI.sidebar,                                 // 侧边栏文件树
+        UI.settingBar,                              // 设置面板
+        document.getElementById('settingBtn'),      // 设置按钮
+        UI.filterCount?.parentElement,              // 筛选计数器
+        document.getElementById('toastContainer'),  // Toast 通知
+        UI.modal                                    // Modal 弹窗
     ];
     for (const el of excludedElements) {
         if (!el) continue;
