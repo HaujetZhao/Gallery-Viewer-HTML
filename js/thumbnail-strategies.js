@@ -152,7 +152,7 @@ const ThumbnailStrategies = {
                 };
 
                 const onLoadedMetadata = () => {    // 载入后跳转
-                    video.currentTime = 0.1;
+                    video.currentTime = Math.min(5, video.duration / 2);
                 };
 
                 const onSeeked = () => {            // 跳转后绘制
